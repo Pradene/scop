@@ -17,7 +17,6 @@ pub enum Token {
     Normal,
     Slash,
     EOF,
-
 }
 
 pub struct Lexer {
@@ -58,7 +57,7 @@ impl Lexer {
 
             n => {
                 self.buffer.clear();
-                self.buffer.extend(String::from_utf8_lossy(&bytes[..n]).chars());;
+                self.buffer.extend(String::from_utf8_lossy(&bytes[..n]).chars());
                 self.buffer_position = 0;
                 return Ok(true);
             }
@@ -106,7 +105,6 @@ impl Lexer {
         }
         
         while let Some(c) = self.peek() {
-
             match c {
                 c if c.is_alphabetic() || c == '_' => {
                     return self.consume_identifier();
