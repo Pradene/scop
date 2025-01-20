@@ -1,9 +1,23 @@
-use scop::parser::parser;
+use scop::lexer::Lexer;
+use scop::lexer::Token;
 
-fn main() {
+use std::io::prelude::*;
+use std::io::{
+    self,
+    BufReader
+};
+
+fn main() -> io::Result<()> {
     let pathname = "./assets/cube.obj";
-    match parser(pathname) {
-        Ok(()) => println!("File parsed"),
-        Err(e) => eprintln!("Error reading file: {}", e)
+    let mut lexer = Lexer::new(pathname).expect("Error");
+
+    while let Ok(token) = lexer.next_token() {
+        if token == Token::EOF {
+            break;
+        }
+
+        println!("{:?}", token);
     }
+
+    return Ok(());
 }
