@@ -16,6 +16,7 @@ pub enum Token {
     Vertice,
     Normal,
     Slash,
+    Comment,
     EOF,
 }
 
@@ -97,6 +98,21 @@ impl Lexer {
         return Ok(());
     }
 
+    fn skip_comment(&mut self) -> io::Result<()> {
+        while let Some(c) = self.peek() {
+            match c {
+                '\n' => {
+                    self.advance()?;
+                    break;
+                }
+
+                _ => self.advance()?,
+            }
+        }
+
+        return Ok(());
+    }
+
     pub fn next_token(&mut self) -> io::Result<Token> {
         self.skip_whitespace()?;
 
@@ -112,6 +128,10 @@ impl Lexer {
 
                 c if c.is_numeric() || c == '.'  || c == '-' => {
                     return self.consumer_number();
+                }
+
+                '#' => {
+                    self.skip_comment();
                 }
 
                 '/' => {
