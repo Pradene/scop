@@ -7,6 +7,8 @@ use crate::lexer::{
     Token
 };
 
+use lineal::Vector;
+
 pub fn parse(path: &str) -> Object {
     
     let mut lexer = Lexer::new(path).expect("Error");
@@ -15,8 +17,6 @@ pub fn parse(path: &str) -> Object {
     let mut group = Group::new();
 
     while let Ok(token) = lexer.next_token() {
-        println!("{:?}", token);
-
         match token {
             Token::Group => {
                 match lexer.next_token() {
@@ -32,12 +32,11 @@ pub fn parse(path: &str) -> Object {
             }
 
             Token::Vertice => {
-                // Handle the 'v' token (vertex), expecting 3 tokens for the coordinates
                 let mut coordinates = Vec::new();
                 for _ in 0..3 {
                     match lexer.next_token() {
                         Ok(Token::Number(num)) => {
-                            coordinates.push(num); // Handle integer as float
+                            coordinates.push(num);
                         }
 
                         _ => {
@@ -48,9 +47,8 @@ pub fn parse(path: &str) -> Object {
                 }
 
                 if coordinates.len() == 3 {
-                    // Create a vertex with 3 coordinates
                     coordinates.push(0.);
-                    println!("{:?}", coordinates);
+                    group.vertices.push(Vector::try_from(coordinates).unwrap());
                 } else {
                     eprintln!("Error: Invalid number of vertex coordinates. Expected 3 but got {}", coordinates.len());
                     break;
@@ -58,12 +56,11 @@ pub fn parse(path: &str) -> Object {
             }
 
             Token::Normal => {
-                // Handle the 'v' token (vertex), expecting 3 tokens for the coordinates
                 let mut coordinates = Vec::new();
                 for _ in 0..3 {
                     match lexer.next_token() {
                         Ok(Token::Number(num)) => {
-                            coordinates.push(num); // Handle integer as float
+                            coordinates.push(num);
                         }
 
                         _ => {
@@ -74,9 +71,8 @@ pub fn parse(path: &str) -> Object {
                 }
 
                 if coordinates.len() == 3 {
-                    // Create a vertex with 3 coordinates
                     coordinates.push(1.);
-                    println!("{:?}", coordinates);
+                    group.vertices.push(Vector::try_from(coordinates).unwrap());
                 } else {
                     eprintln!("Error: Invalid number of vertex coordinates. Expected 3 but got {}", coordinates.len());
                     break;
@@ -84,32 +80,45 @@ pub fn parse(path: &str) -> Object {
             }
 
             Token::Face => {
-                let mut face_indices = Vec::new();
+                let mut face = Vec::new();
                 
                 loop {
                     let next_token = lexer.peek_token();
                     match next_token {
                         Ok(Token::Number(index)) => {
-                            face_indices.push((index as usize).saturating_sub(1));
-                            let _ = lexer.next_token(); // Actually consume the token
-                        }
-                        Ok(Token::Slash) => {
-                            let _ = lexer.next_token(); // Consume slash
-                            // Skip texture/normal indices for now
-                            if let Ok(Token::Number(_)) = lexer.next_token() {
-                                // Skip the texture coordinate index
+                            let vertex_index = (index as usize).saturating_sub(1);
+                            let _ = lexer.next_token();
+                        
+                            let mut texture_index = None;
+                            let mut normal_index = None;
+                        
+                            if let Ok(Token::Slash) = lexer.peek_token() {
+                                let _ = lexer.next_token();
+                            
+                                if let Ok(Token::Number(index)) = lexer.peek_token() {
+                                    texture_index = Some((index as usize).saturating_sub(1));
+                                    let _ = lexer.next_token();
+                                }
+                            
+                                if let Ok(Token::Slash) = lexer.peek_token() {
+                                    let _ = lexer.next_token();
+                                
+                                    if let Ok(Token::Number(index)) = lexer.peek_token() {
+                                        normal_index = Some((index as usize).saturating_sub(1));
+                                        let _ = lexer.next_token();
+                                    }
+                                }
                             }
+                        
+                            face.push((vertex_index, texture_index, normal_index));
                         }
-                        Ok(_) => {
-                            // Print the current face and exit this loop
-                            if face_indices.len() >= 3 {
-                                println!("Face indices: {:?}", face_indices);
-                            }
-                            break;
-                        }
+                    
+                        Ok(_) => break,
                         Err(_) => break,
-                    }
+                    }        
                 }
+
+                group.faces.push(face);
             }
 
             Token::Comment(_) => {
@@ -125,6 +134,8 @@ pub fn parse(path: &str) -> Object {
             }
         }
     }
+
+    println!("{:#?}", group);
 
     return object;
 }

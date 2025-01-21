@@ -11,7 +11,7 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 [[package]]
 name = "lineal"
 version = "0.1.0"
-source = "git+https://github.com/Pradene/lineal/?branch=main#360e16685beaebe4ab41a83fde883159a5d2617b"
+source = "git+https://github.com/Pradene/lineal/?branch=main#154579cdd3b56dacb785a14cf08b53f3913d96a0"
 dependencies = [
  "num",
 ]
