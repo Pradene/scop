@@ -48,6 +48,7 @@ pub fn parse(path: &str) -> Vec<Object> {
                     println!("{:?}", coordinates);
                 } else {
                     eprintln!("Error: Invalid number of vertex coordinates. Expected 3 but got {}", coordinates.len());
+                    break;
                 }
             }
 
@@ -73,16 +74,47 @@ pub fn parse(path: &str) -> Vec<Object> {
                     println!("{:?}", coordinates);
                 } else {
                     eprintln!("Error: Invalid number of vertex coordinates. Expected 3 but got {}", coordinates.len());
+                    break;
                 }
             }
 
             Token::Face => {
-                break;
+                let mut face_indices = Vec::new();
+                
+                loop {
+                    let next_token = lexer.peek_token();
+                    match next_token {
+                        Ok(Token::Number(index)) => {
+                            face_indices.push((index as usize).saturating_sub(1));
+                            let _ = lexer.next_token(); // Actually consume the token
+                        }
+                        Ok(Token::Slash) => {
+                            let _ = lexer.next_token(); // Consume slash
+                            // Skip texture/normal indices for now
+                            if let Ok(Token::Number(_)) = lexer.next_token() {
+                                // Skip the texture coordinate index
+                            }
+                        }
+                        Ok(_) => {
+                            // Print the current face and exit this loop
+                            if face_indices.len() >= 3 {
+                                println!("Face indices: {:?}", face_indices);
+                            }
+                            break;
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+
+            Token::Comment(_) => {
+                continue;
             }
 
             Token::EOF => {
                 break;
             }
+            
             _ => {
                 eprintln!("{:?} not implemented", token);
             }

@@ -5,7 +5,7 @@ pub struct Object {
     name: String,
     vertices: Vec<Vector<f32, 4>>,
     normals: Vec<Vector<f32, 4>>,
-    faces: Vec<Vec<usize>>
+    faces: Vec<Vec<(usize, Option<usize>, Option<usize>)>>
 }
 
 impl Object {

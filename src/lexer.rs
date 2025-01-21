@@ -7,8 +7,9 @@ use std::io::{
 
 const BUFFER_SIZE: usize = 16;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
+    Comment(String),
     Number(f32),
     Identifier(String),
     Group,
@@ -16,7 +17,6 @@ pub enum Token {
     Vertice,
     Normal,
     Slash,
-    Comment,
     EOF,
 }
 
@@ -28,6 +28,8 @@ pub struct Lexer {
 
     buffer: Vec<char>,
     buffer_position: usize,
+
+    peeked_token: Option<Token>,
 }
 
 impl Lexer {
@@ -41,6 +43,7 @@ impl Lexer {
             row: 1,
             buffer: Vec::new(),
             buffer_position: 0,
+            peeked_token: None,
         };
 
         lexer.read_file()?;
@@ -65,12 +68,12 @@ impl Lexer {
         }
     }
 
-    fn peek(&self) -> Option<char> {
+    fn char(&self) -> Option<char> {
         return self.buffer.get(self.buffer_position).copied();
     }
 
     fn advance(&mut self) -> io::Result<()> {
-        if let Some(c) = self.peek() {
+        if let Some(c) = self.char() {
             if c == '\n' {
                 self.row += 1;
                 self.col = 1;
@@ -88,7 +91,7 @@ impl Lexer {
     }
 
     fn skip_whitespace(&mut self) -> io::Result<()> {
-        while let Some(c) = self.peek() {
+        while let Some(c) = self.char() {
             match c {
                 c if c.is_whitespace() => self.advance()?,
                 _ => break,
@@ -98,29 +101,29 @@ impl Lexer {
         return Ok(());
     }
 
-    fn skip_comment(&mut self) -> io::Result<()> {
-        while let Some(c) = self.peek() {
-            match c {
-                '\n' => {
-                    self.advance()?;
-                    break;
-                }
-
-                _ => self.advance()?,
-            }
+    pub fn peek_token(&mut self) -> io::Result<Token> {
+        if let Some(token) = &self.peeked_token {
+            return Ok(token.clone());
         }
 
-        return Ok(());
+        let token = self.next_token()?;
+        self.peeked_token = Some(token.clone());
+
+        return Ok(token);
     }
 
     pub fn next_token(&mut self) -> io::Result<Token> {
+        if let Some(token) = self.peeked_token.take() {
+            return Ok(token);
+        }
+
         self.skip_whitespace()?;
 
-        if self.peek().is_none() {
+        if self.char().is_none() {
             return Ok(Token::EOF);
         }
         
-        while let Some(c) = self.peek() {
+        while let Some(c) = self.char() {
             match c {
                 c if c.is_alphabetic() || c == '_' => {
                     return self.consume_identifier();
@@ -131,7 +134,7 @@ impl Lexer {
                 }
 
                 '#' => {
-                    self.skip_comment();
+                    return self.consume_comment();
                 }
 
                 '/' => {
@@ -148,10 +151,30 @@ impl Lexer {
         return Ok(Token::EOF);
     }
 
+    fn consume_comment(&mut self) -> io::Result<Token> {
+        let mut comment = String::new();
+
+        while let Some(c) = self.char() {
+            match c {
+                '\n' => {
+                    self.advance()?;
+                    break;
+                }
+
+                _ => {
+                    comment.push(c);
+                    self.advance()?;
+                }
+            }
+        }
+
+        return Ok(Token::Comment(comment));
+    }
+
     fn consume_identifier(&mut self) -> io::Result<Token> {
         let mut identifier = String::new();
 
-        while let Some(c) = self.peek() {
+        while let Some(c) = self.char() {
             match c {
                 c if c.is_alphabetic() || c == '_' => {
                     identifier.push(c);
@@ -167,9 +190,9 @@ impl Lexer {
         // Return special tokens for specific identifiers
         match identifier.as_str() {
             "g" => Ok(Token::Group),
-            "f" => Ok(Token::Face),
             "v" => Ok(Token::Vertice),
             "vn" => Ok(Token::Normal),
+            "f" => Ok(Token::Face),
             _ => Ok(Token::Identifier(identifier)),
         }
     }
@@ -177,7 +200,7 @@ impl Lexer {
     fn consumer_number(&mut self) -> io::Result<Token> {
         let mut number = String::new();
 
-        while let Some(c) = self.peek() {
+        while let Some(c) = self.char() {
             match c {
                 c if c.is_numeric() || c == '.' || c == '-' => {
                     number.push(c);
@@ -195,6 +218,9 @@ impl Lexer {
         } else {
             Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid number"))
         }
-    
+    }
+
+    pub fn position(&self) -> (usize, usize) {
+        return (self.row, self.col);
     }
 }
