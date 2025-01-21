@@ -1,13 +1,18 @@
-use crate::object::Object;
+use crate::object::{
+    Object,
+    Group
+};
 use crate::lexer::{
     Lexer,
     Token
 };
 
-pub fn parse(path: &str) -> Vec<Object> {
+pub fn parse(path: &str) -> Object {
     
-    let mut objects: Vec<Object> = Vec::new();
     let mut lexer = Lexer::new(path).expect("Error");
+    
+    let mut object = Object::new();
+    let mut group = Group::new();
 
     while let Ok(token) = lexer.next_token() {
         println!("{:?}", token);
@@ -16,7 +21,7 @@ pub fn parse(path: &str) -> Vec<Object> {
             Token::Group => {
                 match lexer.next_token() {
                     Ok(Token::Identifier(name)) => {
-                        objects.push(Object::new(&name));
+                        group.name = name;
                     }
                     
                     _ => {
@@ -121,5 +126,5 @@ pub fn parse(path: &str) -> Vec<Object> {
         }
     }
 
-    return objects;
+    return object;
 }
