@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 lineal = { git = "https://github.com/Pradene/lineal/", branch = "main" }
+sdl2 = "0.37.0"

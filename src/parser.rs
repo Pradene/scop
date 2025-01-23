@@ -135,7 +135,8 @@ pub fn parse(path: &str) -> Object {
         }
     }
 
-    println!("{:#?}", group);
+    object.groups.push(group);
+    println!("{:#?}", object);
 
     return object;
 }
