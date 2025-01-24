@@ -12,6 +12,7 @@ pub struct VkContext {
     graphics_queue: vk::Queue,
 }
 
+#[derive(Clone)]
 pub struct QueueFamiliesIndices {
     graphics_index: Option<u32>,
 }
@@ -38,9 +39,11 @@ impl VkContext {
                 .map_err(|e| format!("Failed to create Vulkan instance: {:?}", e))?
         };
 
-        let physical_device = Self::pick_physical_device(&instance)?;
+        let (physical_device, queue_family) = Self::pick_physical_device(&instance)?;
 
-        let (logical_device, graphics_queue) = Self::create_logical_device(&instance, &physical_device)?;
+        let logical_device = Self::create_logical_device(&instance, &physical_device, &queue_family)?;
+
+        let graphics_queue = unsafe { logical_device.get_device_queue(queue_family.graphics_index.unwrap(), 0) };
 
         return Ok(Self {
             entry,
@@ -51,53 +54,48 @@ impl VkContext {
         });
     }
 
-    fn pick_physical_device(instance: &Instance) -> Result<vk::PhysicalDevice, String> {
+    fn pick_physical_device(instance: &Instance) -> Result<(vk::PhysicalDevice, QueueFamiliesIndices), String> {
         // Enumerate physical devices
         let devices = unsafe {
             instance
                 .enumerate_physical_devices()
                 .map_err(|e| format!("Failed to enumerate physical devices: {:?}", e))?
         };
-
+    
         if devices.is_empty() {
             return Err("No Vulkan-compatible physical devices found.".to_string());
         }
-
-        let mut candidates: BTreeMap<i32, vk::PhysicalDevice> = BTreeMap::new();
+    
+        let mut candidates: BTreeMap<i32, (vk::PhysicalDevice, QueueFamiliesIndices)> = BTreeMap::new();
         for device in &devices {
-            let score = Self::rate_physical_device(instance, device);
-            candidates.insert(score, *device);
+            // Rate the device and find queue families
+            let mut score: i32 = 0;
+            let features = unsafe { instance.get_physical_device_features(*device) };
+            let properties = unsafe { instance.get_physical_device_properties(*device) };
+            let queue_families = Self::find_queue_families(instance, device);
+    
+            if properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
+                score += 1000;
+            }
+    
+            // Maximum possible size of textures affects graphics quality
+            score += properties.limits.max_image_dimension2_d as i32;
+    
+            // Application can't function without geometry shaders or queues
+            if features.geometry_shader == 0 || queue_families.graphics_index.is_none() {
+                continue; // Skip this device if it doesn't meet the requirements
+            }
+    
+            candidates.insert(score, (*device, queue_families));
         }
-
-        if let Some((&score, &best_device)) = candidates.iter().rev().next() {
+    
+        if let Some((&score, (device, queue_family))) = candidates.iter().rev().next() {
             if score > 0 {
-                return Ok(best_device);
+                return Ok((*device, queue_family.clone())); // Clone queue family if necessary
             }
         }
-
+    
         return Err("Failed to find a suitable GPU.".to_string());
-    }
-
-    fn rate_physical_device(instance: &Instance, physical_device: &vk::PhysicalDevice) -> i32 {
-        let mut score: i32 = 0;
-
-        let features = unsafe { instance.get_physical_device_features(*physical_device) };
-        let properties = unsafe { instance.get_physical_device_properties(*physical_device) };
-        let queue_families = Self::find_queue_families(instance, physical_device);
-
-        if properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
-            score += 1000;
-        }
-
-        // Maximum possible size of textures affects graphics quality
-        score += properties.limits.max_image_dimension2_d as i32;
-
-        // Application can't function without geometry shaders or queues
-        if features.geometry_shader == 0 || queue_families.graphics_index.is_none() {
-            return 0;
-        }
-
-        return score;
     }
 
     fn find_queue_families(
@@ -124,9 +122,8 @@ impl VkContext {
     fn create_logical_device(
         instance: &Instance,
         physical_device: &vk::PhysicalDevice,
-    ) -> Result<(Device, vk::Queue), String> {
-        let queue_family = Self::find_queue_families(instance, physical_device);
-
+        queue_family: &QueueFamiliesIndices
+    ) -> Result<Device, String> {
         let queue_priority = 1.0;
         let graphics_index = queue_family
             .graphics_index
@@ -162,9 +159,7 @@ impl VkContext {
                 .map_err(|e| format!("Failed to create logical device: {}", e))?
         };
 
-        let graphics_queue = unsafe { logical_device.get_device_queue(graphics_index, 0) };
-
-        return Ok((logical_device, graphics_queue));
+        return Ok(logical_device);
     }
 }
 
