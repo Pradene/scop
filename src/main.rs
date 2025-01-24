@@ -2,7 +2,7 @@ use scop::app::App;
 
 use ash_window;
 
-use ash::{vk, Device, Entry, Instance};
+use ash::{khr, vk, Device, Entry, Instance};
 use std::collections::BTreeMap;
 use winit::{
     event_loop::{ControlFlow, EventLoop},
@@ -16,13 +16,15 @@ pub struct VkContext {
     physical_device: vk::PhysicalDevice,
     logical_device: Device,
     graphics_queue: vk::Queue,
+    present_queue: vk::Queue,
+    surface_instance: khr::surface::Instance,
     surface: vk::SurfaceKHR,
 }
 
 #[derive(Clone)]
 pub struct QueueFamiliesIndices {
-    graphics_index: Option<u32>,
-    // present_index: Option<u32>,
+    graphics_family: Option<u32>,
+    present_family: Option<u32>,
 }
 
 impl VkContext {
@@ -30,6 +32,8 @@ impl VkContext {
         let entry = Entry::linked();
 
         let instance = Self::create_instance(&entry)?;
+
+        let surface_instance = khr::surface::Instance::new(&entry, &instance);
 
         let surface = unsafe {
             ash_window::create_surface(
@@ -42,13 +46,16 @@ impl VkContext {
             .map_err(|e| format!("Failed to create surface: {}", e))?
         };
 
-        let (physical_device, queue_family) = Self::pick_physical_device(&instance)?;
+        let (physical_device, queue_family) =
+            Self::pick_physical_device(&instance, &surface_instance, &surface)?;
 
         let logical_device =
             Self::create_logical_device(&instance, &physical_device, &queue_family)?;
 
         let graphics_queue =
-            unsafe { logical_device.get_device_queue(queue_family.graphics_index.unwrap(), 0) };
+            unsafe { logical_device.get_device_queue(queue_family.graphics_family.unwrap(), 0) };
+        let present_queue =
+            unsafe { logical_device.get_device_queue(queue_family.present_family.unwrap(), 0) };
 
         return Ok(Self {
             entry,
@@ -56,12 +63,16 @@ impl VkContext {
             physical_device,
             logical_device,
             graphics_queue,
+            present_queue,
+            surface_instance,
             surface,
         });
     }
 
     fn pick_physical_device(
         instance: &Instance,
+        surface_instance: &khr::surface::Instance,
+        surface: &vk::SurfaceKHR,
     ) -> Result<(vk::PhysicalDevice, QueueFamiliesIndices), String> {
         // Enumerate physical devices
         let devices = unsafe {
@@ -81,7 +92,8 @@ impl VkContext {
             let mut score: i32 = 0;
             let features = unsafe { instance.get_physical_device_features(*device) };
             let properties = unsafe { instance.get_physical_device_properties(*device) };
-            let queue_families = Self::find_queue_families(instance, device);
+            let queue_families =
+                Self::find_queue_families(instance, surface_instance, surface, device);
 
             if properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
                 score += 1000;
@@ -91,7 +103,7 @@ impl VkContext {
             score += properties.limits.max_image_dimension2_d as i32;
 
             // Application can't function without geometry shaders or queues
-            if features.geometry_shader == 0 || queue_families.graphics_index.is_none() {
+            if features.geometry_shader == 0 || queue_families.graphics_family.is_none() {
                 continue; // Skip this device if it doesn't meet the requirements
             }
 
@@ -109,23 +121,44 @@ impl VkContext {
 
     fn find_queue_families(
         instance: &Instance,
+        surface_instance: &khr::surface::Instance,
+        surface: &vk::SurfaceKHR,
         physical_device: &vk::PhysicalDevice,
     ) -> QueueFamiliesIndices {
-        let mut graphics_index = None;
+        let mut graphics_family = None;
+        let mut present_family = None;
+
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(*physical_device) };
 
         for (index, queue_family) in queue_families.iter().enumerate() {
-            if queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                graphics_index = Some(index as u32);
+            let index = index as u32;
+
+            if queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+                && graphics_family.is_none()
+            {
+                graphics_family = Some(index);
             }
 
-            if graphics_index.is_some() {
+            let present_support = unsafe {
+                surface_instance
+                    .get_physical_device_surface_support(*physical_device, index, *surface)
+                    .unwrap()
+            };
+
+            if present_support && present_family.is_none() {
+                present_family = Some(index);
+            }
+
+            if graphics_family.is_some() && present_family.is_some() {
                 break;
             }
         }
 
-        return QueueFamiliesIndices { graphics_index };
+        return QueueFamiliesIndices {
+            graphics_family,
+            present_family,
+        };
     }
 
     fn create_instance(entry: &Entry) -> Result<Instance, String> {
@@ -155,20 +188,24 @@ impl VkContext {
         physical_device: &vk::PhysicalDevice,
         queue_family: &QueueFamiliesIndices,
     ) -> Result<Device, String> {
-        let queue_priority = 1.0;
-        let graphics_index = queue_family
-            .graphics_index
-            .ok_or_else(|| "Failed to find a suitable graphics queue family.".to_string())?;
+        let graphics_family = queue_family.graphics_family.unwrap();
+        let present_family = queue_family.present_family.unwrap();
 
-        let queue_create_info = vk::DeviceQueueCreateInfo {
-            s_type: vk::StructureType::DEVICE_QUEUE_CREATE_INFO,
-            p_next: std::ptr::null(),
-            flags: vk::DeviceQueueCreateFlags::empty(),
-            queue_family_index: graphics_index,
-            queue_count: 1,
-            p_queue_priorities: &queue_priority,
-            ..Default::default()
-        };
+        let unique_queue_families = vec![graphics_family, present_family];
+
+        let queue_priority = 1.0;
+        let queue_create_infos: Vec<vk::DeviceQueueCreateInfo> = unique_queue_families
+            .iter()
+            .map(|&queue_family| vk::DeviceQueueCreateInfo {
+                s_type: vk::StructureType::DEVICE_QUEUE_CREATE_INFO,
+                p_next: std::ptr::null(),
+                flags: vk::DeviceQueueCreateFlags::empty(),
+                queue_family_index: queue_family,
+                queue_count: 1,
+                p_queue_priorities: &queue_priority,
+                ..Default::default()
+            })
+            .collect();
 
         let device_features = vk::PhysicalDeviceFeatures::default();
 
@@ -176,8 +213,8 @@ impl VkContext {
             s_type: vk::StructureType::DEVICE_CREATE_INFO,
             p_next: std::ptr::null(),
             flags: vk::DeviceCreateFlags::empty(),
-            queue_create_info_count: 1,
-            p_queue_create_infos: &queue_create_info,
+            queue_create_info_count: queue_create_infos.len() as u32,
+            p_queue_create_infos: queue_create_infos.as_ptr(),
             p_enabled_features: &device_features,
             enabled_extension_count: 0,
             pp_enabled_extension_names: std::ptr::null(),
