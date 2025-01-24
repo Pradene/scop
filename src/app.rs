@@ -30,3 +30,9 @@ impl ApplicationHandler for App {
         }
     }
 }
+
+impl App {
+    pub fn get_window(&self) -> &Option<Window> {
+        return &self.window;
+    }
+}

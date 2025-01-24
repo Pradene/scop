@@ -1,8 +1,11 @@
 use scop::app::App;
 
-use ash::{vk, Device, Entry, Instance};
+use ash::{vk, Device, Entry, Instance, khr};
 use std::collections::BTreeMap;
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::{
+    window::Window,
+    event_loop::{ControlFlow, EventLoop}
+};
 
 pub struct VkContext {
     entry: Entry,
@@ -10,34 +13,22 @@ pub struct VkContext {
     physical_device: vk::PhysicalDevice,
     logical_device: Device,
     graphics_queue: vk::Queue,
+    // surface: vk::SurfaceKHR,
 }
 
 #[derive(Clone)]
 pub struct QueueFamiliesIndices {
     graphics_index: Option<u32>,
+    // present_index: Option<u32>,
 }
 
 impl VkContext {
-    fn new() -> Result<Self, String> {
+    fn new(window: &Window) -> Result<Self, String> {
         let entry = Entry::linked();
 
-        // Set up Vulkan application information
-        let application_info = vk::ApplicationInfo {
-            api_version: vk::API_VERSION_1_3,
-            ..Default::default()
-        };
+        let instance = Self::create_instance(&entry)?;
 
-        // Create Vulkan instance
-        let create_info = vk::InstanceCreateInfo {
-            p_application_info: &application_info,
-            ..Default::default()
-        };
-
-        let instance = unsafe {
-            entry
-                .create_instance(&create_info, None)
-                .map_err(|e| format!("Failed to create Vulkan instance: {:?}", e))?
-        };
+        // let surface = khr::surface::Instance::new(&entry, &instance);
 
         let (physical_device, queue_family) = Self::pick_physical_device(&instance)?;
 
@@ -50,7 +41,7 @@ impl VkContext {
             instance,
             physical_device,
             logical_device,
-            graphics_queue,
+            graphics_queue
         });
     }
 
@@ -119,6 +110,28 @@ impl VkContext {
         return QueueFamiliesIndices { graphics_index };
     }
 
+    fn create_instance(entry: &Entry) -> Result<Instance, String> {
+        // Set up Vulkan application information
+        let application_info = vk::ApplicationInfo {
+            api_version: vk::API_VERSION_1_3,
+            ..Default::default()
+        };
+
+        // Create Vulkan instance
+        let create_info = vk::InstanceCreateInfo {
+            p_application_info: &application_info,
+            ..Default::default()
+        };
+
+        let instance = unsafe {
+            entry
+                .create_instance(&create_info, None)
+                .map_err(|e| format!("Failed to create Vulkan instance: {:?}", e))?
+        };
+
+        return Ok(instance);
+    }
+
     fn create_logical_device(
         instance: &Instance,
         physical_device: &vk::PhysicalDevice,
@@ -172,7 +185,7 @@ fn main() -> Result<(), String> {
     let mut app = App::default();
 
     // Load Vulkan entry points
-    let _ = VkContext::new().map_err(|e| format!("Failed to create Vulkan Context: {}", e));
+    let _ = VkContext::new(&app.get_window().as_ref().unwrap()).map_err(|e| format!("Failed to create Vulkan Context: {}", e));
 
     // Run the application
     let _ = event_loop.run_app(&mut app);
