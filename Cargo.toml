@@ -6,5 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ash = { version = "0.38.0", features = ["linked"] }
 lineal = { git = "https://github.com/Pradene/lineal/", branch = "main" }
-sdl2 = "0.37.0"
+winit = "0.30.8"

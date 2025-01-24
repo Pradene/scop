@@ -1,4 +1,4 @@
-pub mod parser;
-pub mod object;
+pub mod app;
 pub mod lexer;
-pub mod window;
+pub mod object;
+pub mod parser;

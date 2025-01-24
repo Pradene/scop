@@ -1,9 +1,6 @@
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{
-    self,
-    BufReader
-};
+use std::io::{self, BufReader};
 
 const BUFFER_SIZE: usize = 16;
 
@@ -53,7 +50,7 @@ impl Lexer {
 
     fn read_file(&mut self) -> io::Result<bool> {
         let mut bytes = [0; BUFFER_SIZE];
-        
+
         match self.reader.read(&mut bytes)? {
             0 => {
                 return Ok(false);
@@ -61,7 +58,8 @@ impl Lexer {
 
             n => {
                 self.buffer.clear();
-                self.buffer.extend(String::from_utf8_lossy(&bytes[..n]).chars());
+                self.buffer
+                    .extend(String::from_utf8_lossy(&bytes[..n]).chars());
                 self.buffer_position = 0;
                 return Ok(true);
             }
@@ -80,7 +78,7 @@ impl Lexer {
             } else {
                 self.col += 1;
             }
-            
+
             self.buffer_position += 1;
             if self.buffer_position >= self.buffer.len() {
                 self.read_file()?;
@@ -122,14 +120,14 @@ impl Lexer {
         if self.char().is_none() {
             return Ok(Token::EOF);
         }
-        
+
         while let Some(c) = self.char() {
             match c {
                 c if c.is_alphabetic() || c == '_' => {
                     return self.consume_identifier();
                 }
 
-                c if c.is_numeric() || c == '.'  || c == '-' => {
+                c if c.is_numeric() || c == '.' || c == '-' => {
                     return self.consumer_number();
                 }
 
@@ -186,7 +184,7 @@ impl Lexer {
                 }
             }
         }
-    
+
         // Return special tokens for specific identifiers
         match identifier.as_str() {
             "g" => Ok(Token::Group),
