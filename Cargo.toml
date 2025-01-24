@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 ash = { version = "0.38.0", features = ["linked"] }
+ash-window = "0.13.0"
 lineal = { git = "https://github.com/Pradene/lineal/", branch = "main" }
 winit = "0.30.8"
