@@ -1,12 +1,15 @@
+use ash::khr::swapchain;
 use ash_window;
 
-use std::ffi::{CStr, CString};
 use ash::{khr, vk, Device, Entry, Instance};
 use std::collections::{BTreeMap, HashSet};
+use std::ffi::{CStr, CString};
 use winit::{
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::Window,
 };
+
+const DEVICE_EXTENSIONS: [&CStr; 1] = [vk::KHR_SWAPCHAIN_NAME];
 
 pub struct VkContext {
     entry: Entry,
@@ -25,9 +28,11 @@ pub struct QueueFamiliesIndices {
     present_family: Option<u32>,
 }
 
-const DEVICE_EXTENSIONS: [&CStr; 1] = [
-    vk::KHR_SWAPCHAIN_NAME,
-];
+pub struct SwapChainSupportDetails {
+    capabilities: vk::SurfaceCapabilitiesKHR,
+    formats: Vec<vk::SurfaceFormatKHR>,
+    present_modes: Vec<vk::PresentModeKHR>,
+}
 
 impl VkContext {
     pub fn new(window: &Window) -> Result<Self, String> {
@@ -78,139 +83,6 @@ impl VkContext {
         });
     }
 
-
-
-    fn choose_physical_device(
-        instance: &Instance,
-        surface_loader: &khr::surface::Instance,
-        surface: &vk::SurfaceKHR,
-    ) -> Result<(vk::PhysicalDevice, QueueFamiliesIndices), String> {
-        let physical_devices = unsafe {
-            instance
-                .enumerate_physical_devices()
-                .map_err(|e| format!("Failed to enumerate physical devices: {:?}", e))?
-        };
-
-        if physical_devices.is_empty() {
-            return Err("No Vulkan-compatible physical devices found.".to_string());
-        }
-
-        let mut candidates: BTreeMap<i32, (vk::PhysicalDevice, QueueFamiliesIndices)> = BTreeMap::new();
-        for physical_device in physical_devices {
-            let (score, queue_families) = Self::rate_device(instance, surface_loader, surface, physical_device)?;
-            if score > 0 {
-                if Self::is_device_suitable(instance, &physical_device, &queue_families) {
-                    candidates.insert(score, (physical_device, queue_families));
-                }
-            }
-        }
-
-        candidates.iter().rev().next().map_or_else(
-            || Err("Failed to find a suitable GPU.".to_string()),
-            |(_, (device, queue_family))| Ok((*device, queue_family.clone())),
-        )
-    }
-
-
-
-    fn rate_device(
-        instance: &Instance,
-        surface_loader: &khr::surface::Instance,
-        surface: &vk::SurfaceKHR,
-        physical_device: vk::PhysicalDevice,
-    ) -> Result<(i32, QueueFamiliesIndices), String> {
-        let properties = unsafe { instance.get_physical_device_properties(physical_device) };
-        let features = unsafe { instance.get_physical_device_features(physical_device) };
-        let queue_families = Self::find_queue_families(instance, &physical_device, surface_loader, surface);
-
-        let mut score = 0;
-
-        if properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
-            score += 1000;
-        }
-
-        score += properties.limits.max_image_dimension2_d as i32;
-
-        if features.geometry_shader == 0 || queue_families.graphics_family.is_none() {
-            return Ok((0, queue_families)); // Skip if no geometry shader or graphics family
-        }
-
-        return Ok((score, queue_families));
-    }
-
-
-
-    fn is_device_suitable(
-        instance: &Instance,
-        physical_device: &vk::PhysicalDevice,
-        queue_families: &QueueFamiliesIndices,
-    ) -> bool {
-        let device_extensions = unsafe {
-            instance
-                .enumerate_device_extension_properties(*physical_device)
-                .map_err(|e| format!("{}", e))
-                .unwrap_or_default()
-        };
-
-        let mut required_extensions: HashSet<&CStr> = HashSet::from(DEVICE_EXTENSIONS);
-
-        for extension in device_extensions {
-            let extension_name = unsafe {
-                CStr::from_ptr(extension.extension_name.as_ptr())
-            };
-
-            if required_extensions.contains(extension_name) {
-                required_extensions.remove(extension_name);
-            }
-        }
-
-        required_extensions.is_empty() && queue_families.graphics_family.is_some()
-    }
-
-
-
-    fn find_queue_families(
-        instance: &Instance,
-        physical_device: &vk::PhysicalDevice,
-        surface_loader: &khr::surface::Instance,
-        surface: &vk::SurfaceKHR,
-    ) -> QueueFamiliesIndices {
-        let mut graphics_family = None;
-        let mut present_family = None;
-
-        let queue_families =
-            unsafe { instance.get_physical_device_queue_family_properties(*physical_device) };
-
-        for (index, queue_family) in queue_families.iter().enumerate() {
-            let index = index as u32;
-
-            if graphics_family.is_none() && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                graphics_family = Some(index);
-            }
-
-            let present_support = unsafe {
-                surface_loader
-                    .get_physical_device_surface_support(*physical_device, index, *surface)
-                    .unwrap()
-            };
-
-            if present_support && present_family.is_none() {
-                present_family = Some(index);
-            }
-
-            if graphics_family.is_some() && present_family.is_some() {
-                break;
-            }
-        }
-
-        return QueueFamiliesIndices {
-            graphics_family,
-            present_family,
-        };
-    }
-
-
-
     fn create_instance(entry: &Entry, window: &Window) -> Result<Instance, String> {
         // Set up Vulkan application information
         let application_info = vk::ApplicationInfo {
@@ -221,7 +93,7 @@ impl VkContext {
         let display_handle = window
             .display_handle()
             .map_err(|e| format!("Error with display: {}", e))?;
-        
+
         let extension_names = ash_window::enumerate_required_extensions(display_handle.as_raw())
             .map_err(|e| format!("Error with extension: {}", e))?;
 
@@ -241,8 +113,6 @@ impl VkContext {
 
         return Ok(instance);
     }
-
-
 
     fn create_logical_device(
         instance: &Instance,
@@ -270,6 +140,10 @@ impl VkContext {
 
         let device_features = vk::PhysicalDeviceFeatures::default();
 
+        let device_extensions: Vec<_> = DEVICE_EXTENSIONS
+            .iter()
+            .map(|extension| extension.as_ptr())
+            .collect();
         let create_info = vk::DeviceCreateInfo {
             s_type: vk::StructureType::DEVICE_CREATE_INFO,
             p_next: std::ptr::null(),
@@ -277,8 +151,8 @@ impl VkContext {
             queue_create_info_count: queue_create_infos.len() as u32,
             p_queue_create_infos: queue_create_infos.as_ptr(),
             p_enabled_features: &device_features,
-            enabled_extension_count: 0,
-            pp_enabled_extension_names: std::ptr::null(),
+            enabled_extension_count: device_extensions.len() as u32,
+            pp_enabled_extension_names: device_extensions.as_ptr(),
             ..Default::default()
         };
 
@@ -289,5 +163,177 @@ impl VkContext {
         };
 
         return Ok(logical_device);
+    }
+
+    fn choose_physical_device(
+        instance: &Instance,
+        surface_loader: &khr::surface::Instance,
+        surface: &vk::SurfaceKHR,
+    ) -> Result<(vk::PhysicalDevice, QueueFamiliesIndices), String> {
+        let physical_devices = unsafe {
+            instance
+                .enumerate_physical_devices()
+                .map_err(|e| format!("Failed to enumerate physical devices: {:?}", e))?
+        };
+
+        if physical_devices.is_empty() {
+            return Err("No Vulkan-compatible physical devices found.".to_string());
+        }
+
+        let mut candidates: BTreeMap<i32, (vk::PhysicalDevice, QueueFamiliesIndices)> =
+            BTreeMap::new();
+        for physical_device in physical_devices {
+            let (score, queue_families) =
+                Self::rate_device(instance, surface_loader, surface, physical_device)?;
+            if score > 0 {
+                if Self::is_device_suitable(
+                    instance,
+                    &physical_device,
+                    &queue_families,
+                    surface_loader,
+                    surface,
+                ) {
+                    candidates.insert(score, (physical_device, queue_families));
+                }
+            }
+        }
+
+        return candidates.iter().rev().next().map_or_else(
+            || Err("Failed to find a suitable GPU.".to_string()),
+            |(_, (device, queue_family))| Ok((*device, queue_family.clone())),
+        );
+    }
+
+    fn rate_device(
+        instance: &Instance,
+        surface_loader: &khr::surface::Instance,
+        surface: &vk::SurfaceKHR,
+        physical_device: vk::PhysicalDevice,
+    ) -> Result<(i32, QueueFamiliesIndices), String> {
+        let properties = unsafe { instance.get_physical_device_properties(physical_device) };
+        let features = unsafe { instance.get_physical_device_features(physical_device) };
+        let queue_families =
+            Self::find_queue_families(instance, &physical_device, surface_loader, surface);
+
+        let mut score = 0;
+
+        if properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
+            score += 1000;
+        }
+
+        score += properties.limits.max_image_dimension2_d as i32;
+
+        if features.geometry_shader == 0 || queue_families.graphics_family.is_none() {
+            return Ok((0, queue_families)); // Skip if no geometry shader or graphics family
+        }
+
+        return Ok((score, queue_families));
+    }
+
+    fn is_device_suitable(
+        instance: &Instance,
+        physical_device: &vk::PhysicalDevice,
+        queue_families: &QueueFamiliesIndices,
+        surface_loader: &khr::surface::Instance,
+        surface: &vk::SurfaceKHR,
+    ) -> bool {
+        let device_extensions = unsafe {
+            instance
+                .enumerate_device_extension_properties(*physical_device)
+                .map_err(|e| format!("{}", e))
+                .unwrap_or_default()
+        };
+
+        let mut swapchain_support;
+        match Self::query_swapchain_support(physical_device, surface_loader, surface) {
+            Ok(value) => swapchain_support = value,
+            Err(_) => return false,
+        }
+
+        let mut required_extensions: HashSet<&CStr> = HashSet::from(DEVICE_EXTENSIONS);
+
+        for extension in device_extensions {
+            let extension_name = unsafe { CStr::from_ptr(extension.extension_name.as_ptr()) };
+
+            if required_extensions.contains(extension_name) {
+                required_extensions.remove(extension_name);
+            }
+        }
+
+        return required_extensions.is_empty()
+            && queue_families.graphics_family.is_some()
+            && !swapchain_support.formats.is_empty()
+            && !swapchain_support.present_modes.is_empty();
+    }
+
+    fn find_queue_families(
+        instance: &Instance,
+        physical_device: &vk::PhysicalDevice,
+        surface_loader: &khr::surface::Instance,
+        surface: &vk::SurfaceKHR,
+    ) -> QueueFamiliesIndices {
+        let mut graphics_family = None;
+        let mut present_family = None;
+
+        let queue_families =
+            unsafe { instance.get_physical_device_queue_family_properties(*physical_device) };
+
+        for (index, queue_family) in queue_families.iter().enumerate() {
+            let index = index as u32;
+
+            let graphics_flags = queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS);
+            if graphics_family.is_none() && graphics_flags {
+                graphics_family = Some(index);
+            }
+
+            let present_support = unsafe {
+                surface_loader
+                    .get_physical_device_surface_support(*physical_device, index, *surface)
+                    .unwrap()
+            };
+
+            if present_support && present_family.is_none() {
+                present_family = Some(index);
+            }
+
+            if graphics_family.is_some() && present_family.is_some() {
+                break;
+            }
+        }
+
+        return QueueFamiliesIndices {
+            graphics_family,
+            present_family,
+        };
+    }
+
+    fn query_swapchain_support(
+        physical_device: &vk::PhysicalDevice,
+        surface_loader: &khr::surface::Instance,
+        surface: &vk::SurfaceKHR,
+    ) -> Result<SwapChainSupportDetails, String> {
+        let capabilities = unsafe {
+            surface_loader
+                .get_physical_device_surface_capabilities(*physical_device, *surface)
+                .map_err(|e| format!("Failed to get surface capabilities: {}", e))?
+        };
+
+        let formats = unsafe {
+            surface_loader
+                .get_physical_device_surface_formats(*physical_device, *surface)
+                .map_err(|e| format!("Failed to get surface formats: {}", e))?
+        };
+
+        let present_modes = unsafe {
+            surface_loader
+                .get_physical_device_surface_present_modes(*physical_device, *surface)
+                .map_err(|e| format!("Failed to get surface present modes: {}", e))?
+        };
+
+        return Ok(SwapChainSupportDetails {
+            capabilities,
+            formats,
+            present_modes,
+        });
     }
 }
