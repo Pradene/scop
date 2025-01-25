@@ -2,7 +2,7 @@ use ash_window;
 
 use ash::{khr, vk, Device, Entry, Instance};
 use std::collections::{BTreeMap, HashSet};
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use winit::{
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::Window,
@@ -19,6 +19,11 @@ pub struct VkContext {
     present_queue: vk::Queue,
     surface_loader: khr::surface::Instance,
     surface: vk::SurfaceKHR,
+    swapchain: vk::SwapchainKHR,
+    swapchain_images: Vec<vk::Image>,
+    swapchain_image_format: vk::Format,
+    swapchain_extent: vk::Extent2D,
+    swapchain_image_views: Vec<vk::ImageView>,
 }
 
 #[derive(Clone)]
@@ -59,16 +64,30 @@ impl VkContext {
             .map_err(|e| format!("Failed to create surface: {}", e))?
         };
 
-        let (physical_device, queue_family) =
+        let (physical_device, queue_families) =
             Self::choose_physical_device(&instance, &surface_loader, &surface)?;
 
         let logical_device =
-            Self::create_logical_device(&instance, &physical_device, &queue_family)?;
+            Self::create_logical_device(&instance, &physical_device, &queue_families)?;
 
         let graphics_queue =
-            unsafe { logical_device.get_device_queue(queue_family.graphics_family.unwrap(), 0) };
+            unsafe { logical_device.get_device_queue(queue_families.graphics_family.unwrap(), 0) };
         let present_queue =
-            unsafe { logical_device.get_device_queue(queue_family.present_family.unwrap(), 0) };
+            unsafe { logical_device.get_device_queue(queue_families.present_family.unwrap(), 0) };
+
+        let (swapchain, swapchain_images, swapchain_image_format, swapchain_extent) =
+            Self::create_swapchain(
+                &instance,
+                window,
+                &logical_device,
+                &physical_device,
+                &queue_families,
+                &surface_loader,
+                &surface,
+            )?;
+
+        let swapchain_image_views =
+            Self::create_image_views(&logical_device, &swapchain_images, swapchain_image_format)?;
 
         return Ok(Self {
             entry,
@@ -79,6 +98,11 @@ impl VkContext {
             present_queue,
             surface_loader,
             surface,
+            swapchain,
+            swapchain_images,
+            swapchain_image_format,
+            swapchain_extent,
+            swapchain_image_views,
         });
     }
 
@@ -243,7 +267,7 @@ impl VkContext {
                 .unwrap_or_default()
         };
 
-        let mut swapchain_support;
+        let swapchain_support;
         match Self::query_swapchain_support(physical_device, surface_loader, surface) {
             Ok(value) => swapchain_support = value,
             Err(_) => return false,
@@ -344,7 +368,7 @@ impl VkContext {
         queue_families: &QueueFamiliesIndices,
         surface_loader: &khr::surface::Instance,
         surface: &vk::SurfaceKHR,
-    ) -> Result<vk::SwapchainKHR, String> {
+    ) -> Result<(vk::SwapchainKHR, Vec<vk::Image>, vk::Format, vk::Extent2D), String> {
         let swapchain_support_details =
             Self::query_swapchain_support(physical_device, surface_loader, surface)
                 .map_err(|e| format!("Failed to get swapchain support details: {}", e))?;
@@ -397,7 +421,13 @@ impl VkContext {
                 .map_err(|e| format!("Failed to create swapchain: {}", e))?
         };
 
-        return Ok(swapchain);
+        let swapchain_images = unsafe {
+            swapchain_loader
+                .get_swapchain_images(swapchain)
+                .map_err(|e| format!("Failed to get swapchain images: {}", e))?
+        };
+
+        return Ok((swapchain, swapchain_images, surface_format.format, extent));
     }
 
     fn choose_swapchain_surface_format(
@@ -448,5 +478,45 @@ impl VkContext {
 
             return extent;
         }
+    }
+
+    fn create_image_views(
+        logical_device: &Device,
+        swapchain_images: &Vec<vk::Image>,
+        swapchain_image_format: vk::Format,
+    ) -> Result<Vec<vk::ImageView>, String> {
+        let mut swapchain_image_views: Vec<vk::ImageView> = Vec::new();
+
+        for image in swapchain_images {
+            let create_info = vk::ImageViewCreateInfo {
+                s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                image: *image,
+                view_type: vk::ImageViewType::TYPE_2D,
+                format: swapchain_image_format,
+                components: vk::ComponentMapping {
+                    r: vk::ComponentSwizzle::IDENTITY,
+                    b: vk::ComponentSwizzle::IDENTITY,
+                    g: vk::ComponentSwizzle::IDENTITY,
+                    a: vk::ComponentSwizzle::IDENTITY,
+                },
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                },
+                ..Default::default()
+            };
+
+            let image_view = unsafe {
+                logical_device
+                    .create_image_view(&create_info, None)
+                    .map_err(|e| format!("Failed to create image view: {}", e))?
+            };
+            swapchain_image_views.push(image_view);
+        }
+
+        return Ok(swapchain_image_views);
     }
 }
