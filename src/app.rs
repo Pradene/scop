@@ -1,3 +1,4 @@
+use crate::vulkan::VkContext;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -8,13 +9,31 @@ use winit::{
 #[derive(Default)]
 pub struct App {
     window: Option<Window>,
+    context: Option<VkContext>,
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let attributes = Window::default_attributes().with_title("Scop");
-
-        self.window = Some(event_loop.create_window(attributes).unwrap());
+        if self.window.is_none() {
+            println!("Creating window...");
+            let window_attributes = Window::default_attributes().with_title("Scop");
+            let window = event_loop.create_window(window_attributes).expect("Failed to create window");
+            println!("Window created successfully.");
+    
+            println!("Initializing Vulkan context...");
+            match VkContext::new(&window) {
+                Ok(context) => {
+                    self.context = Some(context);
+                    println!("Vulkan context initialized successfully.");
+                }
+                Err(e) => {
+                    println!("Failed to create Vulkan context: {:?}", e);
+                    return;
+                }
+            }
+    
+            self.window = Some(window);
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -28,11 +47,5 @@ impl ApplicationHandler for App {
             }
             _ => (),
         }
-    }
-}
-
-impl App {
-    pub fn get_window(&self) -> &Option<Window> {
-        return &self.window;
     }
 }

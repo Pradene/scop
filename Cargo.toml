@@ -9,4 +9,5 @@ edition = "2021"
 ash = { version = "0.38.0", features = ["linked"] }
 ash-window = "0.13.0"
 lineal = { git = "https://github.com/Pradene/lineal/", branch = "main" }
+raw-window-handle = "0.6.2"
 winit = "0.30.8"
