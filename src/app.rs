@@ -17,9 +17,11 @@ impl ApplicationHandler for App {
         if self.window.is_none() {
             println!("Creating window...");
             let window_attributes = Window::default_attributes().with_title("Scop");
-            let window = event_loop.create_window(window_attributes).expect("Failed to create window");
+            let window = event_loop
+                .create_window(window_attributes)
+                .expect("Failed to create window");
             println!("Window created successfully.");
-    
+
             println!("Initializing Vulkan context...");
             match VkContext::new(&window) {
                 Ok(context) => {
@@ -31,7 +33,7 @@ impl ApplicationHandler for App {
                     return;
                 }
             }
-    
+
             self.window = Some(window);
         }
     }
