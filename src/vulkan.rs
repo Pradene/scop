@@ -1,4 +1,3 @@
-use ash::khr::swapchain;
 use ash_window;
 
 use ash::{khr, vk, Device, Entry, Instance};
@@ -335,5 +334,119 @@ impl VkContext {
             formats,
             present_modes,
         });
+    }
+
+    fn create_swapchain(
+        instance: &Instance,
+        window: &Window,
+        logical_device: &Device,
+        physical_device: &vk::PhysicalDevice,
+        queue_families: &QueueFamiliesIndices,
+        surface_loader: &khr::surface::Instance,
+        surface: &vk::SurfaceKHR,
+    ) -> Result<vk::SwapchainKHR, String> {
+        let swapchain_support_details =
+            Self::query_swapchain_support(physical_device, surface_loader, surface)
+                .map_err(|e| format!("Failed to get swapchain support details: {}", e))?;
+
+        let surface_format =
+            Self::choose_swapchain_surface_format(&swapchain_support_details.formats);
+        let present_mode =
+            Self::choose_swapchain_present_mode(&swapchain_support_details.present_modes);
+        let extent = Self::choose_swapchain_extent(window, &swapchain_support_details.capabilities);
+
+        let mut image_count = swapchain_support_details.capabilities.min_image_count + 1;
+        if swapchain_support_details.capabilities.max_image_count < image_count {
+            image_count = swapchain_support_details.capabilities.max_image_count;
+        }
+
+        let mut create_info = vk::SwapchainCreateInfoKHR {
+            s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
+            surface: *surface,
+            min_image_count: image_count,
+            image_format: surface_format.format,
+            image_color_space: surface_format.color_space,
+            image_extent: extent,
+            image_array_layers: 1,
+            image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            pre_transform: swapchain_support_details.capabilities.current_transform,
+            composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+            present_mode,
+            clipped: vk::TRUE,
+            ..Default::default()
+        };
+
+        if queue_families.graphics_family != queue_families.present_family {
+            create_info.image_sharing_mode = vk::SharingMode::CONCURRENT;
+            create_info.queue_family_index_count = 2;
+            create_info.p_queue_family_indices = [
+                queue_families.graphics_family.unwrap(),
+                queue_families.present_family.unwrap(),
+            ]
+            .as_ptr()
+        } else {
+            create_info.image_sharing_mode = vk::SharingMode::EXCLUSIVE;
+            create_info.queue_family_index_count = 0;
+            create_info.p_queue_family_indices = std::ptr::null();
+        }
+
+        let swapchain_loader = khr::swapchain::Device::new(instance, logical_device);
+        let swapchain = unsafe {
+            swapchain_loader
+                .create_swapchain(&create_info, None)
+                .map_err(|e| format!("Failed to create swapchain: {}", e))?
+        };
+
+        return Ok(swapchain);
+    }
+
+    fn choose_swapchain_surface_format(
+        available_formats: &Vec<vk::SurfaceFormatKHR>,
+    ) -> vk::SurfaceFormatKHR {
+        for available_format in available_formats {
+            if available_format.format == vk::Format::B8G8R8A8_SRGB
+                && available_format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+            {
+                return *available_format;
+            }
+        }
+
+        return available_formats[0];
+    }
+
+    fn choose_swapchain_present_mode(
+        available_present_modes: &Vec<vk::PresentModeKHR>,
+    ) -> vk::PresentModeKHR {
+        for available_present_mode in available_present_modes {
+            if *available_present_mode == vk::PresentModeKHR::MAILBOX {
+                return *available_present_mode;
+            }
+        }
+
+        return vk::PresentModeKHR::FIFO;
+    }
+
+    fn choose_swapchain_extent(
+        window: &Window,
+        capabilities: &vk::SurfaceCapabilitiesKHR,
+    ) -> vk::Extent2D {
+        if capabilities.current_extent.width != u32::MAX {
+            return capabilities.current_extent;
+        } else {
+            let (width, height): (u32, u32) = window.inner_size().into();
+
+            let extent = vk::Extent2D {
+                width: width.clamp(
+                    capabilities.min_image_extent.width,
+                    capabilities.max_image_extent.width,
+                ),
+                height: height.clamp(
+                    capabilities.min_image_extent.height,
+                    capabilities.max_image_extent.height,
+                ),
+            };
+
+            return extent;
+        }
     }
 }
