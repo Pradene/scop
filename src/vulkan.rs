@@ -2,7 +2,9 @@ use ash_window;
 
 use ash::{khr, vk, Device, Entry, Instance};
 use std::collections::{BTreeMap, HashSet};
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
+use std::fs::File;
+use std::io::Read;
 use winit::{
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::Window,
@@ -519,4 +521,73 @@ impl VkContext {
 
         return Ok(swapchain_image_views);
     }
+
+    fn create_graphics_pipeline(logical_device: &Device) -> Result<(), String> {
+        let frag = read_file("shaders/shader.frag.spv")?;
+        let vert = read_file("shaders/shader.vert.spv")?;
+
+        let frag_shader_module = Self::create_shader_module(logical_device, &frag)?;
+        let vert_shader_module = Self::create_shader_module(logical_device, &vert)?;
+
+        let entrypoint = CString::new("main").unwrap().as_ptr();
+        let vert_shader_create_info = vk::PipelineShaderStageCreateInfo {
+            s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage: vk::ShaderStageFlags::VERTEX,
+            module: vert_shader_module,
+            p_name: entrypoint,
+            ..Default::default()
+        };
+
+        let frag_shader_create_info = vk::PipelineShaderStageCreateInfo {
+            s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage: vk::ShaderStageFlags::FRAGMENT,
+            module: frag_shader_module,
+            p_name: entrypoint,
+            ..Default::default()
+        };
+
+        let shader_stages = [vert_shader_create_info, frag_shader_create_info];
+
+        return Ok(());
+    }
+
+    fn create_shader_module(
+        logical_device: &Device,
+        code: &Vec<u32>,
+    ) -> Result<vk::ShaderModule, String> {
+        let create_info = vk::ShaderModuleCreateInfo {
+            s_type: vk::StructureType::SHADER_MODULE_CREATE_INFO,
+            code_size: code.len(),
+            p_code: code.as_ptr(),
+            ..Default::default()
+        };
+
+        let shader_module = unsafe {
+            logical_device
+                .create_shader_module(&create_info, None)
+                .map_err(|e| format!("Failed to create shader module: {}", e))?
+        };
+
+        return Ok(shader_module);
+    }
+}
+
+fn read_file(path: &str) -> Result<Vec<u32>, String> {
+    let mut file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
+
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer);
+
+    if buffer.len() % 4 != 0 {
+        return Err("SPV file size is not aligned to 4 bytes".to_string());
+    }
+
+    // Convert Vec<u8> to Vec<u32>
+    let content = unsafe {
+        let len = buffer.len() / 4;
+        let ptr = buffer.as_ptr() as *const u32;
+        Vec::from_raw_parts(ptr as *mut u32, len, len)
+    };
+
+    return Ok(content);
 }
