@@ -4,12 +4,12 @@ use ash::{khr, vk, Device, Entry, Instance};
 use std::collections::{BTreeMap, HashSet};
 use std::ffi::{CStr, CString};
 use std::fs::File;
-use std::io::Read;
 use winit::{
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::Window,
 };
 
+const VALIDATION_LAYERS_ENABLED: bool = cfg!(debug_assertions);
 const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
 const DEVICE_EXTENSIONS: [&CStr; 1] = [vk::KHR_SWAPCHAIN_NAME];
@@ -31,6 +31,9 @@ pub struct VkContext {
     render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
+    swapchain_framebuffers: Vec<vk::Framebuffer>,
+    command_pool: vk::CommandPool,
+    command_buffer: vk::CommandBuffer,
 }
 
 #[derive(Clone)]
@@ -101,6 +104,17 @@ impl VkContext {
         let (pipeline, pipeline_layout) =
             Self::create_graphics_pipeline(&logical_device, &render_pass)?;
 
+        let swapchain_framebuffers = Self::create_framebuffers(
+            &logical_device,
+            &render_pass,
+            &swapchain_image_views,
+            &swapchain_extent,
+        )?;
+
+        let command_pool = Self::create_command_pool(&logical_device, &queue_families)?;
+
+        let command_buffer = Self::create_command_buffer(&logical_device, &command_pool)?;
+
         return Ok(Self {
             entry,
             instance,
@@ -118,11 +132,14 @@ impl VkContext {
             render_pass,
             pipeline_layout,
             pipeline,
+            swapchain_framebuffers,
+            command_pool,
+            command_buffer,
         });
     }
 
     fn create_instance(entry: &Entry, window: &Window) -> Result<Instance, String> {
-        if Self::check_validation_layer_support(entry) {
+        if VALIDATION_LAYERS_ENABLED && Self::check_validation_layer_support(entry) {
             return Err("Validation layers not supported".to_string());
         }
 
@@ -151,14 +168,17 @@ impl VkContext {
             .collect();
 
         // Create Vulkan instance
-        let create_info = vk::InstanceCreateInfo {
+        let mut create_info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
             pp_enabled_extension_names: extension_names.as_ptr(),
             enabled_extension_count: extension_names.len() as u32,
-            pp_enabled_layer_names: validation_layers.as_ptr(),
-            enabled_layer_count: validation_layers.len() as u32,
             ..Default::default()
         };
+
+        if VALIDATION_LAYERS_ENABLED {
+            create_info.pp_enabled_layer_names = validation_layers.as_ptr();
+            create_info.enabled_layer_count = validation_layers.len() as u32;
+        }
 
         let instance = unsafe {
             entry
@@ -646,20 +666,6 @@ impl VkContext {
             ..Default::default()
         };
 
-        // let viewport = vk::Viewport {
-        //     x: 0.,
-        //     y: 0.,
-        //     width: swapchain_extent.width as f32,
-        //     height: swapchain_extent.height as f32,
-        //     min_depth: 0.,
-        //     max_depth: 1.,
-        // };
-
-        // let scissor = vk::Rect2D {
-        //     offset: Offset2D { x: 0, y: 0 },
-        //     extent: *swapchain_extent,
-        // };
-
         let viewport_state = vk::PipelineViewportStateCreateInfo {
             s_type: vk::StructureType::PIPELINE_VIEWPORT_STATE_CREATE_INFO,
             viewport_count: 1,
@@ -767,7 +773,6 @@ impl VkContext {
         };
 
         return Ok((pipeline, pipeline_layout));
-        // return Err("Failed to create pipeline".to_string());
     }
 
     fn create_shader_module(
@@ -788,6 +793,81 @@ impl VkContext {
         };
 
         return Ok(shader_module);
+    }
+
+    fn create_framebuffers(
+        logical_device: &Device,
+        render_pass: &vk::RenderPass,
+        swapchain_image_views: &Vec<vk::ImageView>,
+        swapchain_extent: &vk::Extent2D,
+    ) -> Result<Vec<vk::Framebuffer>, String> {
+        let mut framebuffers = Vec::new();
+
+        for swapchain_image_view in swapchain_image_views {
+            let attachment = swapchain_image_view;
+
+            let framebuffer_create_info = vk::FramebufferCreateInfo {
+                s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
+                render_pass: *render_pass,
+                attachment_count: 1,
+                p_attachments: attachment,
+                width: swapchain_extent.width,
+                height: swapchain_extent.height,
+                layers: 1,
+                ..Default::default()
+            };
+
+            let framebuffer = unsafe {
+                logical_device
+                    .create_framebuffer(&framebuffer_create_info, None)
+                    .map_err(|e| format!("Failed to create framebuffer: {}", e))?
+            };
+            framebuffers.push(framebuffer);
+        }
+
+        return Ok(framebuffers);
+    }
+
+    fn create_command_pool(
+        logical_device: &Device,
+        queue_families: &QueueFamiliesIndices,
+    ) -> Result<vk::CommandPool, String> {
+        let create_info = vk::CommandPoolCreateInfo {
+            s_type: vk::StructureType::COMMAND_POOL_CREATE_INFO,
+            flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+            queue_family_index: queue_families.graphics_family.unwrap(),
+            ..Default::default()
+        };
+
+        let command_pool = unsafe {
+            logical_device
+                .create_command_pool(&create_info, None)
+                .map_err(|e| format!("Failed to create command pool: {}", e))?
+        };
+
+        return Ok(command_pool);
+    }
+
+    fn create_command_buffer(
+        logical_device: &Device,
+        command_pool: &vk::CommandPool,
+    ) -> Result<vk::CommandBuffer, String> {
+        let allocate_info = vk::CommandBufferAllocateInfo {
+            s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
+            command_pool: *command_pool,
+            level: vk::CommandBufferLevel::PRIMARY,
+            command_buffer_count: 1,
+            ..Default::default()
+        };
+
+        let command_buffer = unsafe {
+            logical_device
+                .allocate_command_buffers(&allocate_info)
+                .map_err(|e| format!("Failed to allocate command buffers"))?
+                .remove(0)
+        };
+
+        return Ok(command_buffer);
     }
 
     fn check_validation_layer_support(entry: &Entry) -> bool {
@@ -826,15 +906,14 @@ impl VkContext {
 }
 
 fn read_spv_file(path: &str) -> Result<Vec<u32>, String> {
-    let mut file = File::open(path)
-        .map_err(|e| format!("Failed to open file {}: {}", path, e))?;
-    
+    let mut file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
+
     let content = ash::util::read_spv(&mut file)
         .map_err(|e| format!("Failed to decode SPIR-V file {}: {}", path, e))?;
-    
+
     // Ensure 4-byte alignment
     if content.len() % 4 != 0 {
-        return Err("Wrong SPIR-V file".to_string())
+        return Err("Wrong SPIR-V file".to_string());
     }
 
     return Ok(content);
