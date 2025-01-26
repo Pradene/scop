@@ -27,6 +27,7 @@ pub struct VkContext {
     swapchain_image_format: vk::Format,
     swapchain_extent: vk::Extent2D,
     swapchain_image_views: Vec<vk::ImageView>,
+    render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
 }
 
@@ -93,6 +94,8 @@ impl VkContext {
         let swapchain_image_views =
             Self::create_image_views(&logical_device, &swapchain_images, swapchain_image_format)?;
 
+        let render_pass = Self::create_render_pass(&logical_device, &swapchain_image_format)?;
+
         let pipeline_layout = Self::create_graphics_pipeline(&logical_device, &swapchain_extent)?;
 
         return Ok(Self {
@@ -109,6 +112,7 @@ impl VkContext {
             swapchain_image_format,
             swapchain_extent,
             swapchain_image_views,
+            render_pass,
             pipeline_layout,
         });
     }
@@ -525,6 +529,52 @@ impl VkContext {
         }
 
         return Ok(swapchain_image_views);
+    }
+
+    fn create_render_pass(
+        logical_device: &Device,
+        swapchain_image_format: &vk::Format,
+    ) -> Result<vk::RenderPass, String> {
+        let color_attachment = vk::AttachmentDescription {
+            format: *swapchain_image_format,
+            samples: vk::SampleCountFlags::TYPE_1,
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::STORE,
+            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+            ..Default::default()
+        };
+
+        let color_attachment_ref = vk::AttachmentReference {
+            attachment: 0,
+            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        };
+
+        let subpass = vk::SubpassDescription {
+            pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+            color_attachment_count: 1,
+            p_color_attachments: &color_attachment_ref,
+            ..Default::default()
+        };
+
+        let render_pass_create_info = vk::RenderPassCreateInfo {
+            s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
+            attachment_count: 1,
+            p_attachments: &color_attachment,
+            subpass_count: 1,
+            p_subpasses: &subpass,
+            ..Default::default()
+        };
+
+        let render_pass = unsafe {
+            logical_device
+                .create_render_pass(&render_pass_create_info, None)
+                .map_err(|e| format!("Failed to create render pass: {}", e))?
+        };
+
+        return Ok(render_pass);
     }
 
     fn create_graphics_pipeline(
