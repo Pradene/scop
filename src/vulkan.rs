@@ -1,3 +1,4 @@
+use ash::vk::Offset2D;
 use ash_window;
 
 use ash::{khr, vk, Device, Entry, Instance};
@@ -26,6 +27,7 @@ pub struct VkContext {
     swapchain_image_format: vk::Format,
     swapchain_extent: vk::Extent2D,
     swapchain_image_views: Vec<vk::ImageView>,
+    pipeline_layout: vk::PipelineLayout,
 }
 
 #[derive(Clone)]
@@ -91,6 +93,8 @@ impl VkContext {
         let swapchain_image_views =
             Self::create_image_views(&logical_device, &swapchain_images, swapchain_image_format)?;
 
+        let pipeline_layout = Self::create_graphics_pipeline(&logical_device, &swapchain_extent)?;
+
         return Ok(Self {
             entry,
             instance,
@@ -105,6 +109,7 @@ impl VkContext {
             swapchain_image_format,
             swapchain_extent,
             swapchain_image_views,
+            pipeline_layout,
         });
     }
 
@@ -522,7 +527,10 @@ impl VkContext {
         return Ok(swapchain_image_views);
     }
 
-    fn create_graphics_pipeline(logical_device: &Device) -> Result<(), String> {
+    fn create_graphics_pipeline(
+        logical_device: &Device,
+        swapchain_extent: &vk::Extent2D,
+    ) -> Result<vk::PipelineLayout, String> {
         let frag = read_file("shaders/shader.frag.spv")?;
         let vert = read_file("shaders/shader.vert.spv")?;
 
@@ -548,7 +556,117 @@ impl VkContext {
 
         let shader_stages = [vert_shader_create_info, frag_shader_create_info];
 
-        return Ok(());
+        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo {
+            s_type: vk::StructureType::PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            vertex_binding_description_count: 0,
+            p_vertex_binding_descriptions: std::ptr::null(),
+            vertex_attribute_description_count: 0,
+            p_vertex_attribute_descriptions: std::ptr::null(),
+            ..Default::default()
+        };
+
+        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo {
+            s_type: vk::StructureType::PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+            primitive_restart_enable: vk::FALSE,
+            ..Default::default()
+        };
+
+        let viewport = vk::Viewport {
+            x: 0.,
+            y: 0.,
+            width: swapchain_extent.width as f32,
+            height: swapchain_extent.height as f32,
+            min_depth: 0.,
+            max_depth: 1.,
+        };
+
+        let scissor = vk::Rect2D {
+            offset: Offset2D { x: 0, y: 0 },
+            extent: *swapchain_extent,
+        };
+
+        let viewport_state = vk::PipelineViewportStateCreateInfo {
+            s_type: vk::StructureType::PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            viewport_count: 1,
+            scissor_count: 1,
+            ..Default::default()
+        };
+
+        let rasterizer = vk::PipelineRasterizationStateCreateInfo {
+            s_type: vk::StructureType::PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            depth_clamp_enable: vk::FALSE,
+            rasterizer_discard_enable: vk::FALSE,
+            polygon_mode: vk::PolygonMode::FILL,
+            line_width: 1.,
+            cull_mode: vk::CullModeFlags::BACK,
+            front_face: vk::FrontFace::CLOCKWISE,
+            depth_bias_enable: vk::FALSE,
+            depth_bias_constant_factor: 0.,
+            depth_bias_clamp: 0.,
+            depth_bias_slope_factor: 0.,
+            ..Default::default()
+        };
+
+        let multisampling = vk::PipelineMultisampleStateCreateInfo {
+            s_type: vk::StructureType::PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            sample_shading_enable: vk::FALSE,
+            rasterization_samples: vk::SampleCountFlags::TYPE_1,
+            min_sample_shading: 1.,
+            p_sample_mask: std::ptr::null(),
+            alpha_to_coverage_enable: vk::FALSE,
+            alpha_to_one_enable: vk::FALSE,
+            ..Default::default()
+        };
+
+        let color_blend_attachment = vk::PipelineColorBlendAttachmentState {
+            color_write_mask: vk::ColorComponentFlags::R
+                | vk::ColorComponentFlags::G
+                | vk::ColorComponentFlags::B
+                | vk::ColorComponentFlags::A,
+            blend_enable: vk::FALSE,
+            src_color_blend_factor: vk::BlendFactor::ONE,
+            dst_color_blend_factor: vk::BlendFactor::ZERO,
+            color_blend_op: vk::BlendOp::ADD,
+            src_alpha_blend_factor: vk::BlendFactor::ONE,
+            dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+            alpha_blend_op: vk::BlendOp::ADD,
+        };
+
+        let color_blending = vk::PipelineColorBlendStateCreateInfo {
+            s_type: vk::StructureType::PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            logic_op_enable: vk::FALSE,
+            logic_op: vk::LogicOp::COPY,
+            attachment_count: 1,
+            p_attachments: &color_blend_attachment,
+            blend_constants: [0.; 4],
+            ..Default::default()
+        };
+
+        let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        let dynamic_state = vk::PipelineDynamicStateCreateInfo {
+            s_type: vk::StructureType::PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            dynamic_state_count: dynamic_states.len() as u32,
+            p_dynamic_states: dynamic_states.as_ptr(),
+            ..Default::default()
+        };
+
+        let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
+            s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
+            set_layout_count: 0,
+            p_set_layouts: std::ptr::null(),
+            push_constant_range_count: 0,
+            p_push_constant_ranges: std::ptr::null(),
+            ..Default::default()
+        };
+
+        let pipeline_layout = unsafe {
+            logical_device
+                .create_pipeline_layout(&pipeline_layout_create_info, None)
+                .map_err(|e| format!("Failed to create pipeline layout: {}", e))?
+        };
+
+        return Ok(pipeline_layout);
     }
 
     fn create_shader_module(
