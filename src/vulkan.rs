@@ -1,4 +1,3 @@
-use ash::vk::Offset2D;
 use ash_window;
 
 use ash::{khr, vk, Device, Entry, Instance};
@@ -98,7 +97,7 @@ impl VkContext {
         let render_pass = Self::create_render_pass(&logical_device, &swapchain_image_format)?;
 
         let (pipeline, pipeline_layout) =
-            Self::create_graphics_pipeline(&logical_device, &swapchain_extent, &render_pass)?;
+            Self::create_graphics_pipeline(&logical_device, &render_pass)?;
 
         return Ok(Self {
             entry,
@@ -582,7 +581,6 @@ impl VkContext {
 
     fn create_graphics_pipeline(
         logical_device: &Device,
-        swapchain_extent: &vk::Extent2D,
         render_pass: &vk::RenderPass,
     ) -> Result<(vk::Pipeline, vk::PipelineLayout), String> {
         let frag = read_file("shaders/shader.frag.spv")?;
@@ -626,19 +624,19 @@ impl VkContext {
             ..Default::default()
         };
 
-        let viewport = vk::Viewport {
-            x: 0.,
-            y: 0.,
-            width: swapchain_extent.width as f32,
-            height: swapchain_extent.height as f32,
-            min_depth: 0.,
-            max_depth: 1.,
-        };
+        // let viewport = vk::Viewport {
+        //     x: 0.,
+        //     y: 0.,
+        //     width: swapchain_extent.width as f32,
+        //     height: swapchain_extent.height as f32,
+        //     min_depth: 0.,
+        //     max_depth: 1.,
+        // };
 
-        let scissor = vk::Rect2D {
-            offset: Offset2D { x: 0, y: 0 },
-            extent: *swapchain_extent,
-        };
+        // let scissor = vk::Rect2D {
+        //     offset: Offset2D { x: 0, y: 0 },
+        //     extent: *swapchain_extent,
+        // };
 
         let viewport_state = vk::PipelineViewportStateCreateInfo {
             s_type: vk::StructureType::PIPELINE_VIEWPORT_STATE_CREATE_INFO,
