@@ -15,25 +15,29 @@ const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const DEVICE_EXTENSIONS: [&CStr; 1] = [vk::KHR_SWAPCHAIN_NAME];
 
 pub struct VkContext {
-    entry: Entry,
-    instance: Instance,
-    physical_device: vk::PhysicalDevice,
-    logical_device: Device,
-    graphics_queue: vk::Queue,
-    present_queue: vk::Queue,
-    surface_loader: khr::surface::Instance,
-    surface: vk::SurfaceKHR,
-    swapchain: vk::SwapchainKHR,
-    swapchain_images: Vec<vk::Image>,
-    swapchain_image_format: vk::Format,
-    swapchain_extent: vk::Extent2D,
-    swapchain_image_views: Vec<vk::ImageView>,
-    render_pass: vk::RenderPass,
-    pipeline_layout: vk::PipelineLayout,
-    pipeline: vk::Pipeline,
-    swapchain_framebuffers: Vec<vk::Framebuffer>,
-    command_pool: vk::CommandPool,
-    command_buffer: vk::CommandBuffer,
+    pub entry: Entry,
+    pub instance: Instance,
+    pub physical_device: vk::PhysicalDevice,
+    pub logical_device: Device,
+    pub graphics_queue: vk::Queue,
+    pub present_queue: vk::Queue,
+    pub surface_loader: khr::surface::Instance,
+    pub surface: vk::SurfaceKHR,
+    pub swapchain_loader: khr::swapchain::Device,
+    pub swapchain: vk::SwapchainKHR,
+    pub swapchain_images: Vec<vk::Image>,
+    pub swapchain_image_format: vk::Format,
+    pub swapchain_extent: vk::Extent2D,
+    pub swapchain_image_views: Vec<vk::ImageView>,
+    pub render_pass: vk::RenderPass,
+    pub pipeline_layout: vk::PipelineLayout,
+    pub pipeline: vk::Pipeline,
+    pub swapchain_framebuffers: Vec<vk::Framebuffer>,
+    pub command_pool: vk::CommandPool,
+    pub command_buffer: vk::CommandBuffer,
+    pub image_available_semaphore: vk::Semaphore,
+    pub render_finished_semaphore: vk::Semaphore,
+    pub fence: vk::Fence,
 }
 
 #[derive(Clone)]
@@ -85,7 +89,7 @@ impl VkContext {
         let present_queue =
             unsafe { logical_device.get_device_queue(queue_families.present_family.unwrap(), 0) };
 
-        let (swapchain, swapchain_images, swapchain_image_format, swapchain_extent) =
+        let (swapchain_loader, swapchain, swapchain_images, swapchain_image_format, swapchain_extent) =
             Self::create_swapchain(
                 &instance,
                 window,
@@ -115,6 +119,8 @@ impl VkContext {
 
         let command_buffer = Self::create_command_buffer(&logical_device, &command_pool)?;
 
+        let (image_available_semaphore, render_finished_semaphore, fence) = Self::create_sync_objects(&logical_device)?;
+
         return Ok(Self {
             entry,
             instance,
@@ -124,6 +130,7 @@ impl VkContext {
             present_queue,
             surface_loader,
             surface,
+            swapchain_loader,
             swapchain,
             swapchain_images,
             swapchain_image_format,
@@ -135,6 +142,9 @@ impl VkContext {
             swapchain_framebuffers,
             command_pool,
             command_buffer,
+            image_available_semaphore,
+            render_finished_semaphore,
+            fence,
         });
     }
 
@@ -421,7 +431,7 @@ impl VkContext {
         queue_families: &QueueFamiliesIndices,
         surface_loader: &khr::surface::Instance,
         surface: &vk::SurfaceKHR,
-    ) -> Result<(vk::SwapchainKHR, Vec<vk::Image>, vk::Format, vk::Extent2D), String> {
+    ) -> Result<(khr::swapchain::Device, vk::SwapchainKHR, Vec<vk::Image>, vk::Format, vk::Extent2D), String> {
         let swapchain_support_details =
             Self::query_swapchain_support(physical_device, surface_loader, surface)
                 .map_err(|e| format!("Failed to get swapchain support details: {}", e))?;
@@ -482,7 +492,7 @@ impl VkContext {
                 .map_err(|e| format!("Failed to get swapchain images: {}", e))?
         };
 
-        return Ok((swapchain, swapchain_images, surface_format.format, extent));
+        return Ok((swapchain_loader, swapchain, swapchain_images, surface_format.format, extent));
     }
 
     fn choose_swapchain_surface_format(
@@ -603,12 +613,24 @@ impl VkContext {
             ..Default::default()
         };
 
+        let dependency = vk::SubpassDependency {
+            src_subpass: vk::SUBPASS_EXTERNAL,
+            dst_subpass: 0,
+            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            src_access_mask: vk::AccessFlags::empty(),
+            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            ..Default::default()
+        };
+
         let render_pass_create_info = vk::RenderPassCreateInfo {
             s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
             attachment_count: 1,
             p_attachments: &color_attachment,
             subpass_count: 1,
             p_subpasses: &subpass,
+            dependency_count: 1,
+            p_dependencies: &dependency,
             ..Default::default()
         };
 
@@ -863,11 +885,113 @@ impl VkContext {
         let command_buffer = unsafe {
             logical_device
                 .allocate_command_buffers(&allocate_info)
-                .map_err(|e| format!("Failed to allocate command buffers"))?
+                .map_err(|e| format!("Failed to allocate command buffers: {}", e))?
                 .remove(0)
         };
 
         return Ok(command_buffer);
+    }
+
+    fn create_sync_objects(logical_device: &Device) -> Result<(vk::Semaphore, vk::Semaphore, vk::Fence), String> {
+        let semaphore_info = vk::SemaphoreCreateInfo {
+            s_type: vk::StructureType::SEMAPHORE_CREATE_INFO,
+            ..Default::default()
+        };
+
+        let fence_info = vk::FenceCreateInfo {
+            s_type: vk::StructureType::FENCE_CREATE_INFO,
+            flags: vk::FenceCreateFlags::SIGNALED,
+            ..Default::default()
+        };
+
+        let image_semaphore = unsafe { logical_device.create_semaphore(&semaphore_info, None).map_err(|e| format!("Failed to create semaphore: {}", e))? };
+        let render_semaphore = unsafe { logical_device.create_semaphore(&semaphore_info, None).map_err(|e| format!("Failed to create semaphore: {}", e))? };
+        let fence = unsafe { logical_device.create_fence(&fence_info, None).map_err(|e| format!("Failed to create fence: {}", e))? };
+
+        return Ok((image_semaphore, render_semaphore, fence));
+    }
+
+    pub fn record_command_buffer(
+        &self,
+        command_buffer: &vk::CommandBuffer,
+        image_index: u32,
+    ) -> Result<(), String> {
+        let begin_info = vk::CommandBufferBeginInfo {
+            s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
+            flags: vk::CommandBufferUsageFlags::empty(),
+            p_inheritance_info: std::ptr::null(),
+            ..Default::default()
+        };
+
+        let _ = unsafe {
+            self.logical_device
+                .begin_command_buffer(*command_buffer, &begin_info)
+                .map_err(|e| format!("Failed to start command buffer: {}", e))?
+        };
+
+        let clear_color = vk::ClearColorValue {
+            float32: [0., 0., 0., 1.0],
+        };
+
+        let clear_value = vk::ClearValue { color: clear_color };
+
+        let render_pass_info = vk::RenderPassBeginInfo {
+            s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
+            render_pass: self.render_pass,
+            framebuffer: self.swapchain_framebuffers[image_index as usize],
+            render_area: vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: self.swapchain_extent,
+            },
+            clear_value_count: 1,
+            p_clear_values: &clear_value,
+            ..Default::default()
+        };
+
+        let _ = unsafe {
+            self.logical_device.cmd_begin_render_pass(
+                *command_buffer,
+                &render_pass_info,
+                vk::SubpassContents::INLINE,
+            )
+        };
+
+        let _ = unsafe {
+            self.logical_device.cmd_bind_pipeline(
+                *command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline,
+            )
+        };
+
+        let viewport = vk::Viewport {
+            x: 0.,
+            y: 0.,
+            width: self.swapchain_extent.width as f32,
+            height: self.swapchain_extent.height as f32,
+            min_depth: 0.,
+            max_depth: 1.,
+        };
+
+        let scissor = vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: self.swapchain_extent,
+        };
+
+        unsafe { self.logical_device.cmd_set_viewport(*command_buffer, 0, &[viewport]) };
+        unsafe { self.logical_device.cmd_set_scissor(*command_buffer, 0, &[scissor]) };
+
+        unsafe { self.logical_device.cmd_draw(*command_buffer, 3, 1, 0, 0) };
+
+        unsafe { self.logical_device.cmd_end_render_pass(*command_buffer) };
+
+        let _ = unsafe {
+            self.logical_device
+                .end_command_buffer(*command_buffer)
+                .map_err(|e| format!("Failed to end command buffer: {}", e))?
+        };
+
+        return Ok(());
     }
 
     fn check_validation_layer_support(entry: &Entry) -> bool {
