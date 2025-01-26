@@ -29,6 +29,7 @@ pub struct VkContext {
     swapchain_image_views: Vec<vk::ImageView>,
     render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
 }
 
 #[derive(Clone)]
@@ -96,7 +97,8 @@ impl VkContext {
 
         let render_pass = Self::create_render_pass(&logical_device, &swapchain_image_format)?;
 
-        let pipeline_layout = Self::create_graphics_pipeline(&logical_device, &swapchain_extent)?;
+        let (pipeline, pipeline_layout) =
+            Self::create_graphics_pipeline(&logical_device, &swapchain_extent, &render_pass)?;
 
         return Ok(Self {
             entry,
@@ -114,6 +116,7 @@ impl VkContext {
             swapchain_image_views,
             render_pass,
             pipeline_layout,
+            pipeline,
         });
     }
 
@@ -580,7 +583,8 @@ impl VkContext {
     fn create_graphics_pipeline(
         logical_device: &Device,
         swapchain_extent: &vk::Extent2D,
-    ) -> Result<vk::PipelineLayout, String> {
+        render_pass: &vk::RenderPass,
+    ) -> Result<(vk::Pipeline, vk::PipelineLayout), String> {
         let frag = read_file("shaders/shader.frag.spv")?;
         let vert = read_file("shaders/shader.vert.spv")?;
 
@@ -716,7 +720,31 @@ impl VkContext {
                 .map_err(|e| format!("Failed to create pipeline layout: {}", e))?
         };
 
-        return Ok(pipeline_layout);
+        let pipeline_create_info = vk::GraphicsPipelineCreateInfo {
+            s_type: vk::StructureType::GRAPHICS_PIPELINE_CREATE_INFO,
+            stage_count: shader_stages.len() as u32,
+            p_stages: shader_stages.as_ptr(),
+            p_vertex_input_state: &vertex_input_info,
+            p_input_assembly_state: &input_assembly,
+            p_viewport_state: &viewport_state,
+            p_rasterization_state: &rasterizer,
+            p_multisample_state: &multisampling,
+            p_color_blend_state: &color_blending,
+            p_dynamic_state: &dynamic_state,
+            layout: pipeline_layout,
+            render_pass: *render_pass,
+            subpass: 0,
+            ..Default::default()
+        };
+
+        let pipeline = unsafe {
+            logical_device
+                .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_create_info], None)
+                .map_err(|_| format!("Failed to create graphics pipeline"))?
+                .remove(0)
+        };
+
+        return Ok((pipeline, pipeline_layout));
     }
 
     fn create_shader_module(
