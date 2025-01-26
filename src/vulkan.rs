@@ -29,8 +29,8 @@ pub struct VkContext {
     swapchain_extent: vk::Extent2D,
     swapchain_image_views: Vec<vk::ImageView>,
     render_pass: vk::RenderPass,
-    // pipeline_layout: vk::PipelineLayout,
-    // pipeline: vk::Pipeline,
+    pipeline_layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
 }
 
 #[derive(Clone)]
@@ -116,8 +116,8 @@ impl VkContext {
             swapchain_extent,
             swapchain_image_views,
             render_pass,
-            // pipeline_layout,
-            // pipeline,
+            pipeline_layout,
+            pipeline,
         });
     }
 
@@ -605,8 +605,8 @@ impl VkContext {
         logical_device: &Device,
         render_pass: &vk::RenderPass,
     ) -> Result<(vk::Pipeline, vk::PipelineLayout), String> {
-        let frag = read_file("shaders/shader.frag.spv")?;
-        let vert = read_file("shaders/shader.vert.spv")?;
+        let frag = read_spv_file("shaders/shader.frag.spv")?;
+        let vert = read_spv_file("shaders/shader.vert.spv")?;
 
         let frag_shader_module = Self::create_shader_module(logical_device, &frag)?;
         let vert_shader_module = Self::create_shader_module(logical_device, &vert)?;
@@ -776,7 +776,7 @@ impl VkContext {
     ) -> Result<vk::ShaderModule, String> {
         let create_info = vk::ShaderModuleCreateInfo {
             s_type: vk::StructureType::SHADER_MODULE_CREATE_INFO,
-            code_size: code.len(),
+            code_size: code.len() * std::mem::size_of::<u32>(),
             p_code: code.as_ptr(),
             ..Default::default()
         };
@@ -816,7 +816,7 @@ impl VkContext {
                 }
             }
 
-            if (found == false) {
+            if found == false {
                 return false;
             }
         }
@@ -825,10 +825,17 @@ impl VkContext {
     }
 }
 
-fn read_file(path: &str) -> Result<Vec<u32>, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
+fn read_spv_file(path: &str) -> Result<Vec<u32>, String> {
+    let mut file = File::open(path)
+        .map_err(|e| format!("Failed to open file {}: {}", path, e))?;
+    
     let content = ash::util::read_spv(&mut file)
         .map_err(|e| format!("Failed to decode SPIR-V file {}: {}", path, e))?;
+    
+    // Ensure 4-byte alignment
+    if content.len() % 4 != 0 {
+        return Err("Wrong SPIR-V file".to_string())
+    }
 
     return Ok(content);
 }
