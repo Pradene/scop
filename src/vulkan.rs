@@ -10,6 +10,8 @@ use winit::{
     window::Window,
 };
 
+const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
+
 const DEVICE_EXTENSIONS: [&CStr; 1] = [vk::KHR_SWAPCHAIN_NAME];
 
 pub struct VkContext {
@@ -27,8 +29,8 @@ pub struct VkContext {
     swapchain_extent: vk::Extent2D,
     swapchain_image_views: Vec<vk::ImageView>,
     render_pass: vk::RenderPass,
-    pipeline_layout: vk::PipelineLayout,
-    pipeline: vk::Pipeline,
+    // pipeline_layout: vk::PipelineLayout,
+    // pipeline: vk::Pipeline,
 }
 
 #[derive(Clone)]
@@ -114,12 +116,16 @@ impl VkContext {
             swapchain_extent,
             swapchain_image_views,
             render_pass,
-            pipeline_layout,
-            pipeline,
+            // pipeline_layout,
+            // pipeline,
         });
     }
 
     fn create_instance(entry: &Entry, window: &Window) -> Result<Instance, String> {
+        if Self::check_validation_layer_support(entry) {
+            return Err("Validation layers not supported".to_string());
+        }
+
         // Set up Vulkan application information
         let application_info = vk::ApplicationInfo {
             api_version: vk::API_VERSION_1_3,
@@ -133,11 +139,24 @@ impl VkContext {
         let extension_names = ash_window::enumerate_required_extensions(display_handle.as_raw())
             .map_err(|e| format!("Error with extension: {}", e))?;
 
+        let validation_layers: Vec<CString> = VALIDATION_LAYERS
+            .iter()
+            .map(|&layer| CString::new(layer).unwrap())
+            .collect();
+
+        // Get raw pointers to the CStrings
+        let validation_layers: Vec<*const i8> = validation_layers
+            .iter()
+            .map(|layer| layer.as_ptr())
+            .collect();
+
         // Create Vulkan instance
         let create_info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
             pp_enabled_extension_names: extension_names.as_ptr(),
             enabled_extension_count: extension_names.len() as u32,
+            pp_enabled_layer_names: validation_layers.as_ptr(),
+            enabled_layer_count: validation_layers.len() as u32,
             ..Default::default()
         };
 
@@ -158,7 +177,8 @@ impl VkContext {
         let graphics_family = queue_family.graphics_family.unwrap();
         let present_family = queue_family.present_family.unwrap();
 
-        let unique_queue_families = vec![graphics_family, present_family];
+        let mut unique_queue_families = vec![graphics_family, present_family];
+        unique_queue_families.dedup();
 
         let queue_priority = 1.0;
         let queue_create_infos: Vec<vk::DeviceQueueCreateInfo> = unique_queue_families
@@ -393,7 +413,9 @@ impl VkContext {
         let extent = Self::choose_swapchain_extent(window, &swapchain_support_details.capabilities);
 
         let mut image_count = swapchain_support_details.capabilities.min_image_count + 1;
-        if swapchain_support_details.capabilities.max_image_count < image_count {
+        if swapchain_support_details.capabilities.max_image_count > 0
+            && swapchain_support_details.capabilities.max_image_count < image_count
+        {
             image_count = swapchain_support_details.capabilities.max_image_count;
         }
 
@@ -735,14 +757,17 @@ impl VkContext {
             ..Default::default()
         };
 
+        let pipeline_create_infos = [pipeline_create_info];
+        let pipeline_cache = vk::PipelineCache::null();
         let pipeline = unsafe {
             logical_device
-                .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_create_info], None)
+                .create_graphics_pipelines(pipeline_cache, &pipeline_create_infos, None)
                 .map_err(|_| format!("Failed to create graphics pipeline"))?
                 .remove(0)
         };
 
         return Ok((pipeline, pipeline_layout));
+        // return Err("Failed to create pipeline".to_string());
     }
 
     fn create_shader_module(
@@ -764,24 +789,46 @@ impl VkContext {
 
         return Ok(shader_module);
     }
+
+    fn check_validation_layer_support(entry: &Entry) -> bool {
+        let available_layers: Vec<vk::LayerProperties>;
+
+        unsafe {
+            match entry.enumerate_instance_layer_properties() {
+                Ok(layers_properties) => available_layers = layers_properties,
+                Err(_) => return false,
+            }
+        }
+
+        for layer_name in VALIDATION_LAYERS {
+            let mut found = false;
+
+            for layer_properties in &available_layers {
+                let layer_properties: Vec<u8> = layer_properties
+                    .layer_name
+                    .iter()
+                    .map(|&b| b as u8)
+                    .collect();
+
+                if layer_name.as_bytes() == layer_properties.as_slice() {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found == false) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 fn read_file(path: &str) -> Result<Vec<u32>, String> {
     let mut file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
-
-    let mut buffer = Vec::new();
-    let _ = file.read_to_end(&mut buffer);
-
-    if buffer.len() % 4 != 0 {
-        return Err("SPV file size is not aligned to 4 bytes".to_string());
-    }
-
-    // Convert Vec<u8> to Vec<u32>
-    let content = unsafe {
-        let len = buffer.len() / 4;
-        let ptr = buffer.as_ptr() as *const u32;
-        Vec::from_raw_parts(ptr as *mut u32, len, len)
-    };
+    let content = ash::util::read_spv(&mut file)
+        .map_err(|e| format!("Failed to decode SPIR-V file {}: {}", path, e))?;
 
     return Ok(content);
 }
