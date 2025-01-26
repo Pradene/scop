@@ -537,12 +537,12 @@ impl VkContext {
         let frag_shader_module = Self::create_shader_module(logical_device, &frag)?;
         let vert_shader_module = Self::create_shader_module(logical_device, &vert)?;
 
-        let entrypoint = CString::new("main").unwrap().as_ptr();
+        let entrypoint = CString::new("main").unwrap();
         let vert_shader_create_info = vk::PipelineShaderStageCreateInfo {
             s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage: vk::ShaderStageFlags::VERTEX,
             module: vert_shader_module,
-            p_name: entrypoint,
+            p_name: entrypoint.as_ptr(),
             ..Default::default()
         };
 
@@ -550,7 +550,7 @@ impl VkContext {
             s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage: vk::ShaderStageFlags::FRAGMENT,
             module: frag_shader_module,
-            p_name: entrypoint,
+            p_name: entrypoint.as_ptr(),
             ..Default::default()
         };
 
@@ -694,7 +694,7 @@ fn read_file(path: &str) -> Result<Vec<u32>, String> {
     let mut file = File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
 
     let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer);
+    let _ = file.read_to_end(&mut buffer);
 
     if buffer.len() % 4 != 0 {
         return Err("SPV file size is not aligned to 4 bytes".to_string());
