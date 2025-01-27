@@ -42,7 +42,7 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => {
                 println!("The close button was pressed; stopping");
-                
+
                 // if let Some(context) = &mut self.context {
                 //     context.cleanup();
                 // }
