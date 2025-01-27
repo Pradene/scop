@@ -1035,10 +1035,5 @@ fn read_spv_file(path: &str) -> Result<Vec<u32>, String> {
     let content = ash::util::read_spv(&mut file)
         .map_err(|e| format!("Failed to decode SPIR-V file {}: {}", path, e))?;
 
-    // Ensure 4-byte alignment
-    if content.len() % 4 != 0 {
-        return Err("Wrong SPIR-V file".to_string());
-    }
-
     return Ok(content);
 }
