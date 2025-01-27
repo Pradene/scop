@@ -52,7 +52,7 @@ impl Vertex {
 }
 
 pub struct VkContext {
-    entry: Entry,
+    _entry: Entry,
     instance: Instance,
     physical_device: vk::PhysicalDevice,
     device: Device,
@@ -72,7 +72,7 @@ pub struct VkContext {
     swapchain_image_views: Vec<vk::ImageView>,
 
     render_pass: vk::RenderPass,
-    pipeline_layout: vk::PipelineLayout,
+    _pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     command_pool: vk::CommandPool,
@@ -159,7 +159,7 @@ impl VkContext {
         let (vertex_buffer, vertex_buffer_memory) = Self::create_vertex_buffer(&instance, &physical_device, &device)?;
 
         return Ok(Self {
-            entry,
+            _entry: entry,
             instance,
             physical_device,
             device,
@@ -175,7 +175,7 @@ impl VkContext {
             swapchain_extent,
             swapchain_image_views,
             render_pass,
-            pipeline_layout,
+            _pipeline_layout: pipeline_layout,
             pipeline,
             swapchain_framebuffers,
             command_pool,
@@ -1305,7 +1305,7 @@ impl VkContext {
     }
 
     fn create_vertex_buffer(instance: &Instance, physical_device: &vk::PhysicalDevice,device: &Device) -> Result<(vk::Buffer, vk::DeviceMemory), String> {
-        let mut vertices = [
+        let vertices = [
             Vertex {
                 position: Vector::new([0.0, -0.5]),
                 color: Vector::new([1.0, 1.0, 1.0]),
