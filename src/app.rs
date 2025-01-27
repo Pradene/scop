@@ -1,7 +1,4 @@
-use std::u64;
-
 use crate::vulkan::VkContext;
-use ash::vk;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -49,8 +46,8 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
-                if let Some(_context) = &mut self.context {
-                    self.draw_frame()
+                if let Some(context) = &mut self.context {
+                    context.draw_frame()
                 }
 
                 self.window.as_ref().unwrap().request_redraw();
@@ -58,51 +55,5 @@ impl ApplicationHandler for App {
 
             _ => (),
         }
-    }
-}
-
-impl App {
-    fn draw_frame(&self) {
-        let context = self.context.as_ref().unwrap();
-
-        let _ = unsafe { context.logical_device.wait_for_fences(&[context.fence], true, u64::MAX) };
-        let _ = unsafe { context.logical_device.reset_fences(&[context.fence]) };
-        
-        let image_index = unsafe { context.swapchain_loader.acquire_next_image(context.swapchain, u64::MAX, context.image_available_semaphore, vk::Fence::null()).unwrap() };
-        let _ = unsafe { context.logical_device.reset_command_buffer(context.command_buffer, vk::CommandBufferResetFlags::empty()) };
-        let _ = context.record_command_buffer(&context.command_buffer, image_index.0);
-
-        let signal_semaphores = [context.render_finished_semaphore];
-        let wait_semaphores = [context.image_available_semaphore];
-        let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        
-        let submit_info = vk::SubmitInfo {
-            s_type: vk::StructureType::SUBMIT_INFO,
-            wait_semaphore_count: wait_semaphores.len() as u32,
-            p_wait_semaphores: wait_semaphores.as_ptr(),
-            p_wait_dst_stage_mask: wait_stages.as_ptr(),
-            command_buffer_count: 1,
-            p_command_buffers: &context.command_buffer,
-            signal_semaphore_count: signal_semaphores.len() as u32,
-            p_signal_semaphores: signal_semaphores.as_ptr(),
-            ..Default::default()
-        };
-
-        let _ = unsafe { context.logical_device.queue_submit(context.graphics_queue, &[submit_info], context.fence) };
-
-        let present_info = vk::PresentInfoKHR {
-            s_type: vk::StructureType::PRESENT_INFO_KHR,
-            wait_semaphore_count: 1,
-            p_wait_semaphores: signal_semaphores.as_ptr(),
-            swapchain_count: 1,
-            p_swapchains: [context.swapchain].as_ptr(),
-            p_image_indices: &image_index.0,
-            p_results: std::ptr::null_mut(),
-            ..Default::default()
-        };
-
-        let _ = unsafe { context.swapchain_loader.queue_present(context.present_queue, &present_info) };
-
-        println!("Hello world");
     }
 }
