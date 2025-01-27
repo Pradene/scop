@@ -42,15 +42,26 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => {
                 println!("The close button was pressed; stopping");
+                
+                // if let Some(context) = &mut self.context {
+                //     context.cleanup();
+                // }
+
                 event_loop.exit();
             }
 
             WindowEvent::RedrawRequested => {
                 if let Some(context) = &mut self.context {
-                    context.draw_frame()
+                    context.draw_frame();
                 }
 
                 self.window.as_ref().unwrap().request_redraw();
+            }
+
+            WindowEvent::Resized(_) => {
+                if let Some(context) = &mut self.context {
+                    context.recreate_swapchain(&self.window.as_ref().unwrap());
+                }
             }
 
             _ => (),

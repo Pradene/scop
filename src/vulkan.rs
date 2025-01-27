@@ -20,9 +20,10 @@ pub struct VkContext {
     pub entry: Entry,
     pub instance: Instance,
     pub physical_device: vk::PhysicalDevice,
-    pub logical_device: Device,
+    pub device: Device,
     pub graphics_queue: vk::Queue,
     pub present_queue: vk::Queue,
+    pub queue_families: QueueFamiliesIndices,
     pub surface_loader: khr::surface::Instance,
     pub surface: vk::SurfaceKHR,
     pub swapchain_loader: khr::swapchain::Device,
@@ -58,40 +59,23 @@ pub struct SwapChainSupportDetails {
 impl VkContext {
     pub fn new(window: &Window) -> Result<Self, String> {
         let entry = Entry::linked();
-
+        
         let instance = Self::create_instance(&entry, window)?;
-
-        let display_handle = window
-            .display_handle()
-            .map_err(|e| format!("Error with display: {}", e))?;
-        let window_handle = window
-            .window_handle()
-            .map_err(|e| format!("Error with window: {}", e))?;
-
-        let surface_loader = khr::surface::Instance::new(&entry, &instance);
-
-        let surface = unsafe {
-            ash_window::create_surface(
-                &entry,
-                &instance,
-                display_handle.as_raw(),
-                window_handle.as_raw(),
-                None,
-            )
-            .map_err(|e| format!("Failed to create surface: {}", e))?
-        };
-
+        
+        let (surface_loader, surface) = Self::create_surface(window, &entry, &instance)?;
+        
         let (physical_device, queue_families) =
             Self::choose_physical_device(&instance, &surface_loader, &surface)?;
-
-        let logical_device =
-            Self::create_logical_device(&instance, &physical_device, &queue_families)?;
-
+        
+        let device =
+            Self::create_device(&instance, &physical_device, &queue_families)?;
+        
         let graphics_queue =
-            unsafe { logical_device.get_device_queue(queue_families.graphics_family.unwrap(), 0) };
+            unsafe { device.get_device_queue(queue_families.graphics_family.unwrap(), 0) };
+        
         let present_queue =
-            unsafe { logical_device.get_device_queue(queue_families.present_family.unwrap(), 0) };
-
+            unsafe { device.get_device_queue(queue_families.present_family.unwrap(), 0) };
+        
         let (
             swapchain_loader,
             swapchain,
@@ -101,7 +85,7 @@ impl VkContext {
         ) = Self::create_swapchain(
             &instance,
             window,
-            &logical_device,
+            &device,
             &physical_device,
             &queue_families,
             &surface_loader,
@@ -109,26 +93,26 @@ impl VkContext {
         )?;
 
         let swapchain_image_views =
-            Self::create_image_views(&logical_device, &swapchain_images, swapchain_image_format)?;
+            Self::create_image_views(&device, &swapchain_images, &swapchain_image_format)?;
 
-        let render_pass = Self::create_render_pass(&logical_device, &swapchain_image_format)?;
+        let render_pass = Self::create_render_pass(&device, &swapchain_image_format)?;
 
         let (pipeline, pipeline_layout) =
-            Self::create_graphics_pipeline(&logical_device, &render_pass)?;
+            Self::create_graphics_pipeline(&device, &render_pass)?;
 
         let swapchain_framebuffers = Self::create_framebuffers(
-            &logical_device,
+            &device,
             &render_pass,
             &swapchain_image_views,
             &swapchain_extent,
         )?;
 
-        let command_pool = Self::create_command_pool(&logical_device, &queue_families)?;
+        let command_pool = Self::create_command_pool(&device, &queue_families)?;
 
-        let command_buffers = Self::create_command_buffers(&logical_device, &command_pool)?;
+        let command_buffers = Self::create_command_buffers(&device, &command_pool)?;
 
         let (image_available_semaphores, render_finished_semaphores, in_flight_fences) =
-            Self::create_sync_objects(&logical_device)?;
+            Self::create_sync_objects(&device)?;
 
         let current_frame = 0;
 
@@ -136,10 +120,11 @@ impl VkContext {
             entry,
             instance,
             physical_device,
-            logical_device,
+            device,
             graphics_queue,
             present_queue,
             surface_loader,
+            queue_families,
             surface,
             swapchain_loader,
             swapchain,
@@ -158,6 +143,40 @@ impl VkContext {
             in_flight_fences,
             current_frame,
         });
+    }
+
+    fn check_validation_layer_support(entry: &Entry) -> bool {
+        let available_layers: Vec<vk::LayerProperties>;
+
+        unsafe {
+            match entry.enumerate_instance_layer_properties() {
+                Ok(layers_properties) => available_layers = layers_properties,
+                Err(_) => return false,
+            }
+        }
+
+        for layer_name in VALIDATION_LAYERS {
+            let mut found = false;
+
+            for layer_properties in &available_layers {
+                let layer_properties: Vec<u8> = layer_properties
+                    .layer_name
+                    .iter()
+                    .map(|&b| b as u8)
+                    .collect();
+
+                if layer_name.as_bytes() == layer_properties.as_slice() {
+                    found = true;
+                    break;
+                }
+            }
+
+            if found == false {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     fn create_instance(entry: &Entry, window: &Window) -> Result<Instance, String> {
@@ -211,7 +230,31 @@ impl VkContext {
         return Ok(instance);
     }
 
-    fn create_logical_device(
+    fn create_surface(window: &Window, entry: &Entry, instance: &Instance) -> Result<(khr::surface::Instance, vk::SurfaceKHR), String> {
+        let display_handle = window
+            .display_handle()
+            .map_err(|e| format!("Error with display: {}", e))?;
+        let window_handle = window
+            .window_handle()
+            .map_err(|e| format!("Error with window: {}", e))?;
+        
+        let surface_loader = khr::surface::Instance::new(&entry, &instance);
+
+        let surface = unsafe {
+            ash_window::create_surface(
+                &entry,
+                &instance,
+                display_handle.as_raw(),
+                window_handle.as_raw(),
+                None,
+            )
+            .map_err(|e| format!("Failed to create surface: {}", e))?
+        };
+
+        return Ok((surface_loader, surface));
+    }
+
+    fn create_device(
         instance: &Instance,
         physical_device: &vk::PhysicalDevice,
         queue_family: &QueueFamiliesIndices,
@@ -254,13 +297,13 @@ impl VkContext {
             ..Default::default()
         };
 
-        let logical_device = unsafe {
+        let device = unsafe {
             instance
                 .create_device(*physical_device, &create_info, None)
                 .map_err(|e| format!("Failed to create logical device: {}", e))?
         };
 
-        return Ok(logical_device);
+        return Ok(device);
     }
 
     fn choose_physical_device(
@@ -438,7 +481,7 @@ impl VkContext {
     fn create_swapchain(
         instance: &Instance,
         window: &Window,
-        logical_device: &Device,
+        device: &Device,
         physical_device: &vk::PhysicalDevice,
         queue_families: &QueueFamiliesIndices,
         surface_loader: &khr::surface::Instance,
@@ -500,7 +543,7 @@ impl VkContext {
             create_info.p_queue_family_indices = std::ptr::null();
         }
 
-        let swapchain_loader = khr::swapchain::Device::new(instance, logical_device);
+        let swapchain_loader = khr::swapchain::Device::new(instance, device);
         let swapchain = unsafe {
             swapchain_loader
                 .create_swapchain(&create_info, None)
@@ -573,9 +616,9 @@ impl VkContext {
     }
 
     fn create_image_views(
-        logical_device: &Device,
+        device: &Device,
         swapchain_images: &Vec<vk::Image>,
-        swapchain_image_format: vk::Format,
+        swapchain_image_format: &vk::Format,
     ) -> Result<Vec<vk::ImageView>, String> {
         let mut swapchain_image_views: Vec<vk::ImageView> = Vec::new();
 
@@ -584,7 +627,7 @@ impl VkContext {
                 s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
                 image: *image,
                 view_type: vk::ImageViewType::TYPE_2D,
-                format: swapchain_image_format,
+                format: *swapchain_image_format,
                 components: vk::ComponentMapping {
                     r: vk::ComponentSwizzle::IDENTITY,
                     b: vk::ComponentSwizzle::IDENTITY,
@@ -602,7 +645,7 @@ impl VkContext {
             };
 
             let image_view = unsafe {
-                logical_device
+                device
                     .create_image_view(&create_info, None)
                     .map_err(|e| format!("Failed to create image view: {}", e))?
             };
@@ -613,7 +656,7 @@ impl VkContext {
     }
 
     fn create_render_pass(
-        logical_device: &Device,
+        device: &Device,
         swapchain_image_format: &vk::Format,
     ) -> Result<vk::RenderPass, String> {
         let color_attachment = vk::AttachmentDescription {
@@ -662,7 +705,7 @@ impl VkContext {
         };
 
         let render_pass = unsafe {
-            logical_device
+            device
                 .create_render_pass(&render_pass_create_info, None)
                 .map_err(|e| format!("Failed to create render pass: {}", e))?
         };
@@ -671,14 +714,14 @@ impl VkContext {
     }
 
     fn create_graphics_pipeline(
-        logical_device: &Device,
+        device: &Device,
         render_pass: &vk::RenderPass,
     ) -> Result<(vk::Pipeline, vk::PipelineLayout), String> {
         let frag = read_spv_file("shaders/shader.frag.spv")?;
         let vert = read_spv_file("shaders/shader.vert.spv")?;
 
-        let frag_shader_module = Self::create_shader_module(logical_device, &frag)?;
-        let vert_shader_module = Self::create_shader_module(logical_device, &vert)?;
+        let frag_shader_module = Self::create_shader_module(device, &frag)?;
+        let vert_shader_module = Self::create_shader_module(device, &vert)?;
 
         let entrypoint = CString::new("main").unwrap();
         let vert_shader_create_info = vk::PipelineShaderStageCreateInfo {
@@ -790,7 +833,7 @@ impl VkContext {
         };
 
         let pipeline_layout = unsafe {
-            logical_device
+            device
                 .create_pipeline_layout(&pipeline_layout_create_info, None)
                 .map_err(|e| format!("Failed to create pipeline layout: {}", e))?
         };
@@ -815,7 +858,7 @@ impl VkContext {
         let pipeline_create_infos = [pipeline_create_info];
         let pipeline_cache = vk::PipelineCache::null();
         let pipeline = unsafe {
-            logical_device
+            device
                 .create_graphics_pipelines(pipeline_cache, &pipeline_create_infos, None)
                 .map_err(|_| format!("Failed to create graphics pipeline"))?
                 .remove(0)
@@ -825,7 +868,7 @@ impl VkContext {
     }
 
     fn create_shader_module(
-        logical_device: &Device,
+        device: &Device,
         code: &Vec<u32>,
     ) -> Result<vk::ShaderModule, String> {
         let create_info = vk::ShaderModuleCreateInfo {
@@ -836,7 +879,7 @@ impl VkContext {
         };
 
         let shader_module = unsafe {
-            logical_device
+            device
                 .create_shader_module(&create_info, None)
                 .map_err(|e| format!("Failed to create shader module: {}", e))?
         };
@@ -845,7 +888,7 @@ impl VkContext {
     }
 
     fn create_framebuffers(
-        logical_device: &Device,
+        device: &Device,
         render_pass: &vk::RenderPass,
         swapchain_image_views: &Vec<vk::ImageView>,
         swapchain_extent: &vk::Extent2D,
@@ -867,7 +910,7 @@ impl VkContext {
             };
 
             let framebuffer = unsafe {
-                logical_device
+                device
                     .create_framebuffer(&framebuffer_create_info, None)
                     .map_err(|e| format!("Failed to create framebuffer: {}", e))?
             };
@@ -878,7 +921,7 @@ impl VkContext {
     }
 
     fn create_command_pool(
-        logical_device: &Device,
+        device: &Device,
         queue_families: &QueueFamiliesIndices,
     ) -> Result<vk::CommandPool, String> {
         let create_info = vk::CommandPoolCreateInfo {
@@ -889,7 +932,7 @@ impl VkContext {
         };
 
         let command_pool = unsafe {
-            logical_device
+            device
                 .create_command_pool(&create_info, None)
                 .map_err(|e| format!("Failed to create command pool: {}", e))?
         };
@@ -898,7 +941,7 @@ impl VkContext {
     }
 
     fn create_command_buffers(
-        logical_device: &Device,
+        device: &Device,
         command_pool: &vk::CommandPool,
     ) -> Result<Vec<vk::CommandBuffer>, String> {
         let allocate_info = vk::CommandBufferAllocateInfo {
@@ -910,7 +953,7 @@ impl VkContext {
         };
 
         let command_buffer = unsafe {
-            logical_device
+            device
                 .allocate_command_buffers(&allocate_info)
                 .map_err(|e| format!("Failed to allocate command buffers: {}", e))?
         };
@@ -919,7 +962,7 @@ impl VkContext {
     }
 
     fn create_sync_objects(
-        logical_device: &Device,
+        device: &Device,
     ) -> Result<(Vec<vk::Semaphore>, Vec<vk::Semaphore>, Vec<vk::Fence>), String> {
         let semaphore_info = vk::SemaphoreCreateInfo {
             s_type: vk::StructureType::SEMAPHORE_CREATE_INFO,
@@ -939,17 +982,17 @@ impl VkContext {
 
         for _ in 0..MAX_FRAMES_IN_FLIGHT {
             let image_semaphore = unsafe {
-                logical_device
+                device
                     .create_semaphore(&semaphore_info, None)
                     .map_err(|e| format!("Failed to create semaphore: {}", e))?
             };
             let render_semaphore = unsafe {
-                logical_device
+                device
                     .create_semaphore(&semaphore_info, None)
                     .map_err(|e| format!("Failed to create semaphore: {}", e))?
             };
             let fence = unsafe {
-                logical_device
+                device
                     .create_fence(&fence_info, None)
                     .map_err(|e| format!("Failed to create fence: {}", e))?
             };
@@ -975,7 +1018,7 @@ impl VkContext {
         };
 
         let _ = unsafe {
-            self.logical_device
+            self.device
                 .begin_command_buffer(*command_buffer, &begin_info)
                 .map_err(|e| format!("Failed to start command buffer: {}", e))?
         };
@@ -1000,7 +1043,7 @@ impl VkContext {
         };
 
         let _ = unsafe {
-            self.logical_device.cmd_begin_render_pass(
+            self.device.cmd_begin_render_pass(
                 *command_buffer,
                 &render_pass_info,
                 vk::SubpassContents::INLINE,
@@ -1008,7 +1051,7 @@ impl VkContext {
         };
 
         let _ = unsafe {
-            self.logical_device.cmd_bind_pipeline(
+            self.device.cmd_bind_pipeline(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
@@ -1030,20 +1073,20 @@ impl VkContext {
         };
 
         unsafe {
-            self.logical_device
+            self.device
                 .cmd_set_viewport(*command_buffer, 0, &[viewport])
         };
         unsafe {
-            self.logical_device
+            self.device
                 .cmd_set_scissor(*command_buffer, 0, &[scissor])
         };
 
-        unsafe { self.logical_device.cmd_draw(*command_buffer, 3, 1, 0, 0) };
+        unsafe { self.device.cmd_draw(*command_buffer, 3, 1, 0, 0) };
 
-        unsafe { self.logical_device.cmd_end_render_pass(*command_buffer) };
+        unsafe { self.device.cmd_end_render_pass(*command_buffer) };
 
         let _ = unsafe {
-            self.logical_device
+            self.device
                 .end_command_buffer(*command_buffer)
                 .map_err(|e| format!("Failed to end command buffer: {}", e))?
         };
@@ -1051,55 +1094,16 @@ impl VkContext {
         return Ok(());
     }
 
-    fn check_validation_layer_support(entry: &Entry) -> bool {
-        let available_layers: Vec<vk::LayerProperties>;
-
-        unsafe {
-            match entry.enumerate_instance_layer_properties() {
-                Ok(layers_properties) => available_layers = layers_properties,
-                Err(_) => return false,
-            }
-        }
-
-        for layer_name in VALIDATION_LAYERS {
-            let mut found = false;
-
-            for layer_properties in &available_layers {
-                let layer_properties: Vec<u8> = layer_properties
-                    .layer_name
-                    .iter()
-                    .map(|&b| b as u8)
-                    .collect();
-
-                if layer_name.as_bytes() == layer_properties.as_slice() {
-                    found = true;
-                    break;
-                }
-            }
-
-            if found == false {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     pub fn draw_frame(&mut self) {
         let _ = unsafe {
-            self.logical_device.wait_for_fences(
+            self.device.wait_for_fences(
                 &[self.in_flight_fences[self.current_frame as usize]],
                 true,
                 u64::MAX,
             )
         };
-        let _ = unsafe {
-            self
-                .logical_device
-                .reset_fences(&[self.in_flight_fences[self.current_frame as usize]])
-        };
 
-        let image_index = unsafe {
+        let (image_index, _) = unsafe {
             self
                 .swapchain_loader
                 .acquire_next_image(
@@ -1110,15 +1114,23 @@ impl VkContext {
                 )
                 .unwrap()
         };
+
         let _ = unsafe {
-            self.logical_device.reset_command_buffer(
+            self
+                .device
+                .reset_fences(&[self.in_flight_fences[self.current_frame as usize]])
+        };
+
+        let _ = unsafe {
+            self.device.reset_command_buffer(
                 self.command_buffers[self.current_frame as usize],
                 vk::CommandBufferResetFlags::empty(),
             )
         };
+
         let _ = self.record_command_buffer(
             &self.command_buffers[self.current_frame as usize],
-            image_index.0,
+            image_index,
         );
 
         let signal_semaphores = [self.render_finished_semaphores[self.current_frame as usize]];
@@ -1138,7 +1150,7 @@ impl VkContext {
         };
 
         let _ = unsafe {
-            self.logical_device.queue_submit(
+            self.device.queue_submit(
                 self.graphics_queue,
                 &[submit_info],
                 self.in_flight_fences[self.current_frame as usize],
@@ -1151,7 +1163,7 @@ impl VkContext {
             p_wait_semaphores: signal_semaphores.as_ptr(),
             swapchain_count: 1,
             p_swapchains: [self.swapchain].as_ptr(),
-            p_image_indices: &image_index.0,
+            p_image_indices: &image_index,
             p_results: std::ptr::null_mut(),
             ..Default::default()
         };
@@ -1160,9 +1172,57 @@ impl VkContext {
             self
                 .swapchain_loader
                 .queue_present(self.present_queue, &present_info)
+                .unwrap()
         };
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    fn cleanup_swapchain(&mut self) {
+        unsafe {
+            for index in 0..self.swapchain_framebuffers.len() {
+                self.device.destroy_framebuffer(self.swapchain_framebuffers[index], None);
+            }
+            
+            for index in 0..self.swapchain_image_views.len() {
+                self.device.destroy_image_view(self.swapchain_image_views[index], None);
+            }
+            
+            self.swapchain_loader.destroy_swapchain(self.swapchain, None);
+        }
+    }
+
+    pub fn cleanup(&mut self) {
+        self.cleanup_swapchain();
+
+        unsafe {
+            self.device.destroy_pipeline(self.pipeline, None);
+            self.device.destroy_render_pass(self.render_pass, None);
+            
+            for index in 0..MAX_FRAMES_IN_FLIGHT {
+                self.device.destroy_semaphore(self.render_finished_semaphores[index as usize], None);
+                self.device.destroy_semaphore(self.image_available_semaphores[index as usize], None);
+                self.device.destroy_fence(self.in_flight_fences[index as usize], None);
+            }
+
+            self.device.destroy_command_pool(self.command_pool, None);
+            self.device.destroy_device(None);
+
+            if VALIDATION_LAYERS_ENABLED {}
+
+            self.surface_loader.destroy_surface(self.surface, None);
+            self.instance.destroy_instance(None);
+        }
+    }
+
+    pub fn recreate_swapchain(&mut self, window: &Window) {
+        let _ = unsafe { self.device.device_wait_idle() };
+
+        self.cleanup_swapchain();
+
+        (self.swapchain_loader, self.swapchain, self.swapchain_images, self.swapchain_image_format, self.swapchain_extent) = Self::create_swapchain(&self.instance, window, &self.device, &self.physical_device, &self.queue_families, &self.surface_loader, &self.surface).unwrap();
+        self.swapchain_image_views = Self::create_image_views(&self.device, &self.swapchain_images, &self.swapchain_image_format).unwrap();
+        self.swapchain_framebuffers = Self::create_framebuffers(&self.device, &self.render_pass, &self.swapchain_image_views, &self.swapchain_extent).unwrap();
     }
 }
 
