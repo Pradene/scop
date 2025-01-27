@@ -1,5 +1,4 @@
 use scop::app::App;
-use scop::parser::parse;
 
 use winit::event_loop::{ControlFlow, EventLoop};
 

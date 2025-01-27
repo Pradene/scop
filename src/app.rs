@@ -49,7 +49,7 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
-                if let Some(context) = &mut self.context {
+                if let Some(_context) = &mut self.context {
                     self.draw_frame()
                 }
 
@@ -65,12 +65,12 @@ impl App {
     fn draw_frame(&self) {
         let context = self.context.as_ref().unwrap();
 
-        unsafe { context.logical_device.wait_for_fences(&[context.fence], true, u64::MAX) };
-        unsafe { context.logical_device.reset_fences(&[context.fence]) };
+        let _ = unsafe { context.logical_device.wait_for_fences(&[context.fence], true, u64::MAX) };
+        let _ = unsafe { context.logical_device.reset_fences(&[context.fence]) };
         
-        let image_index = unsafe { context.swapchain_loader.acquire_next_image(context.swapchain, u64::MAX, context.image_available_semaphore, context.fence).unwrap() };
-        unsafe { context.logical_device.reset_command_buffer(context.command_buffer, vk::CommandBufferResetFlags::empty()) };
-        context.record_command_buffer(&context.command_buffer, image_index.0);
+        let image_index = unsafe { context.swapchain_loader.acquire_next_image(context.swapchain, u64::MAX, context.image_available_semaphore, vk::Fence::null()).unwrap() };
+        let _ = unsafe { context.logical_device.reset_command_buffer(context.command_buffer, vk::CommandBufferResetFlags::empty()) };
+        let _ = context.record_command_buffer(&context.command_buffer, image_index.0);
 
         let signal_semaphores = [context.render_finished_semaphore];
         let wait_semaphores = [context.image_available_semaphore];
@@ -88,20 +88,20 @@ impl App {
             ..Default::default()
         };
 
-        unsafe { context.logical_device.queue_submit(context.graphics_queue, &[submit_info], context.fence) };
+        let _ = unsafe { context.logical_device.queue_submit(context.graphics_queue, &[submit_info], context.fence) };
 
         let present_info = vk::PresentInfoKHR {
             s_type: vk::StructureType::PRESENT_INFO_KHR,
             wait_semaphore_count: 1,
             p_wait_semaphores: signal_semaphores.as_ptr(),
             swapchain_count: 1,
-            p_swapchains: &context.swapchain,
+            p_swapchains: [context.swapchain].as_ptr(),
             p_image_indices: &image_index.0,
             p_results: std::ptr::null_mut(),
             ..Default::default()
         };
 
-        unsafe { context.swapchain_loader.queue_present(context.present_queue, &present_info) };
+        let _ = unsafe { context.swapchain_loader.queue_present(context.present_queue, &present_info) };
 
         println!("Hello world");
     }
