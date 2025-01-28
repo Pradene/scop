@@ -19,6 +19,7 @@ const DEVICE_EXTENSIONS: [&CStr; 1] = [vk::KHR_SWAPCHAIN_NAME];
 
 const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 
+#[derive(Clone, Copy)]
 struct Vertex {
     position: Vector<f32, 2>,
     color: Vector<f32, 3>,
@@ -656,13 +657,20 @@ impl VkSwapchain {
         }
     }
 
-    pub fn recreate(&mut self, window: &Window, instance: &VkInstance, render_pipeline: &VkPipeline) {
+    pub fn recreate(
+        &mut self,
+        window: &Window,
+        instance: &VkInstance,
+        render_pipeline: &VkPipeline,
+    ) {
         let _ = unsafe { instance.device.device_wait_idle() };
 
         self.cleanup(&instance.device);
-        let mut swapchain =  VkSwapchain::new(window, &instance).unwrap();
-        swapchain.create_framebuffers(&instance.device, &render_pipeline.render_pass).unwrap();
-        
+        let mut swapchain = VkSwapchain::new(window, &instance).unwrap();
+        swapchain
+            .create_framebuffers(&instance.device, &render_pipeline.render_pass)
+            .unwrap();
+
         *self = swapchain;
     }
 }
@@ -1041,64 +1049,57 @@ impl VkSyncObjects {
 
 struct VkBuffer {
     buffer: vk::Buffer,
+    size: vk::DeviceSize,
     buffer_memory: vk::DeviceMemory,
 }
 
 impl VkBuffer {
-    fn new(vk: &VkInstance, command: &VkCommand) -> Result<VkBuffer, String> {
-        let vertices = [
-            Vertex {
-                position: Vector::new([0.0, -0.5]),
-                color: Vector::new([1.0, 0.0, 0.0]),
-            },
-            Vertex {
-                position: Vector::new([0.5, 0.5]),
-                color: Vector::new([0.0, 1.0, 0.0]),
-            },
-            Vertex {
-                position: Vector::new([-0.5, 0.5]),
-                color: Vector::new([0.0, 0.0, 1.0]),
-            },
-        ];
+    pub fn new<T: Copy>(
+        vk: &VkInstance,
+        command: &VkCommand,
+        data: &[T],
+        usage: vk::BufferUsageFlags,
+    ) -> Result<VkBuffer, String> {
+        let size = (std::mem::size_of::<T>() * data.len()) as u64;
 
-        let size = (std::mem::size_of::<Vertex>() * vertices.len()) as u64;
-        let usage = vk::BufferUsageFlags::TRANSFER_SRC;
-        let properties =
+        // Create a staging buffer
+        let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
+        let staging_properties =
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+
         let (staging_buffer, staging_buffer_memory) = Self::create_buffer(
             &vk.instance,
             &vk.physical_device,
             &vk.device,
             &size,
-            &usage,
-            &properties,
-        )
-        .unwrap();
+            &staging_usage,
+            &staging_properties,
+        )?;
 
-        let data = unsafe {
+        // Map memory and copy data
+        let data_ptr = unsafe {
             vk.device
                 .map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())
                 .unwrap()
         };
 
         unsafe {
-            std::ptr::copy_nonoverlapping(vertices.as_ptr(), data as *mut Vertex, vertices.len())
-        };
+            std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr as *mut T, data.len());
+            vk.device.unmap_memory(staging_buffer_memory);
+        }
 
-        unsafe { vk.device.unmap_memory(staging_buffer_memory) };
-
-        let usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER;
-        let properties = vk::MemoryPropertyFlags::DEVICE_LOCAL;
+        // Create the target buffer
+        let target_properties = vk::MemoryPropertyFlags::DEVICE_LOCAL;
         let (buffer, buffer_memory) = Self::create_buffer(
             &vk.instance,
             &vk.physical_device,
             &vk.device,
             &size,
             &usage,
-            &properties,
-        )
-        .unwrap();
+            &target_properties,
+        )?;
 
+        // Copy data from the staging buffer to the target buffer
         Self::copy_buffer(
             &vk.device,
             &command.pool,
@@ -1108,13 +1109,17 @@ impl VkBuffer {
             &size,
         );
 
-        unsafe { vk.device.destroy_buffer(staging_buffer, None) };
-        unsafe { vk.device.free_memory(staging_buffer_memory, None) };
+        // Cleanup staging buffer
+        unsafe {
+            vk.device.destroy_buffer(staging_buffer, None);
+            vk.device.free_memory(staging_buffer_memory, None);
+        }
 
-        return Ok(VkBuffer {
+        Ok(VkBuffer {
             buffer,
+            size: data.len() as u64,
             buffer_memory,
-        });
+        })
     }
 
     fn create_buffer(
@@ -1247,7 +1252,8 @@ pub struct VkContext {
     render_pipeline: VkPipeline,
     command: VkCommand,
     sync_objects: VkSyncObjects,
-    buffer: VkBuffer,
+    vertex_buffer: VkBuffer,
+    index_buffer: VkBuffer,
 }
 
 impl VkContext {
@@ -1257,7 +1263,32 @@ impl VkContext {
         let render_pipeline = VkPipeline::new(&instance, &swapchain)?;
         let command = VkCommand::new(&instance)?;
         let sync_objects = VkSyncObjects::new(&instance.device)?;
-        let buffer = VkBuffer::new(&instance, &command)?;
+
+        let vertices = [
+            Vertex {
+                position: Vector::new([-0.5, -0.5]),
+                color: Vector::new([1.0, 0.0, 0.0]),
+            },
+            Vertex {
+                position: Vector::new([0.5, -0.5]),
+                color: Vector::new([0.0, 1.0, 0.0]),
+            },
+            Vertex {
+                position: Vector::new([0.5, 0.5]),
+                color: Vector::new([0.0, 0.0, 1.0]),
+            },
+            Vertex {
+                position: Vector::new([-0.5, 0.5]),
+                color: Vector::new([1.0, 1.0, 1.0]),
+            },
+        ];
+
+        let vertex_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER;
+        let vertex_buffer = VkBuffer::new(&instance, &command, &vertices, vertex_usage)?;
+
+        let indices = [0, 1, 2, 2, 3, 0];
+        let index_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER;
+        let index_buffer = VkBuffer::new(&instance, &command, &indices, index_usage)?;
 
         return Ok(VkContext {
             instance,
@@ -1265,7 +1296,8 @@ impl VkContext {
             render_pipeline,
             command,
             sync_objects,
-            buffer,
+            vertex_buffer,
+            index_buffer,
         });
     }
 
@@ -1413,15 +1445,21 @@ impl VkContext {
             )
         };
 
-        let vertex_buffers = [self.buffer.buffer];
-        let offsets = [0];
-
         unsafe {
             self.instance.device.cmd_bind_vertex_buffers(
                 *command_buffer,
                 0,
-                &vertex_buffers,
-                &offsets,
+                &[self.vertex_buffer.buffer],
+                &[0],
+            )
+        };
+
+        unsafe {
+            self.instance.device.cmd_bind_index_buffer(
+                *command_buffer,
+                self.index_buffer.buffer,
+                0,
+                vk::IndexType::UINT32,
             )
         };
 
@@ -1450,7 +1488,16 @@ impl VkContext {
                 .cmd_set_scissor(*command_buffer, 0, &[scissor])
         };
 
-        unsafe { self.instance.device.cmd_draw(*command_buffer, 3, 1, 0, 0) };
+        unsafe {
+            self.instance.device.cmd_draw_indexed(
+                *command_buffer,
+                self.index_buffer.size as u32,
+                1,
+                0,
+                0,
+                0,
+            )
+        };
 
         unsafe { self.instance.device.cmd_end_render_pass(*command_buffer) };
 
@@ -1470,10 +1517,17 @@ impl VkContext {
         unsafe {
             self.instance
                 .device
-                .destroy_buffer(self.buffer.buffer, None);
+                .destroy_buffer(self.vertex_buffer.buffer, None);
             self.instance
                 .device
-                .free_memory(self.buffer.buffer_memory, None);
+                .free_memory(self.vertex_buffer.buffer_memory, None);
+
+            self.instance
+                .device
+                .destroy_buffer(self.index_buffer.buffer, None);
+            self.instance
+                .device
+                .free_memory(self.index_buffer.buffer_memory, None);
 
             self.instance
                 .device
@@ -1511,6 +1565,7 @@ impl VkContext {
     }
 
     pub fn recreate_swapchain(&mut self, window: &Window) {
-        self.swapchain.recreate(window, &self.instance, &self.render_pipeline);
+        self.swapchain
+            .recreate(window, &self.instance, &self.render_pipeline);
     }
 }
