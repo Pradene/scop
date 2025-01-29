@@ -1,10 +1,8 @@
 use std::collections::{BTreeMap, HashSet};
-use std::ffi::{CStr, CString};
+use std::ffi::{c_void, CStr, CString};
 use std::fs::File;
 
 use ash::{khr, vk, Device, Entry, Instance};
-
-use lineal::Vector;
 
 use ash_window;
 use winit::{
@@ -19,10 +17,16 @@ const DEVICE_EXTENSIONS: [&CStr; 1] = [vk::KHR_SWAPCHAIN_NAME];
 
 const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 
+struct UniformBufferObject {
+    model: glam::Mat4,
+    view: glam::Mat4,
+    proj: glam::Mat4,
+}
+
 #[derive(Clone, Copy)]
 struct Vertex {
-    position: Vector<f32, 2>,
-    color: Vector<f32, 3>,
+    position: glam::Vec2,
+    color: glam::Vec3,
 }
 
 impl Vertex {
@@ -678,19 +682,22 @@ impl VkSwapchain {
 struct VkPipeline {
     render_pass: vk::RenderPass,
     pipeline: vk::Pipeline,
-    _pipeline_layout: vk::PipelineLayout,
+    descriptor_set_layout: vk::DescriptorSetLayout,
+    pipeline_layout: vk::PipelineLayout,
 }
 
 impl VkPipeline {
     fn new(vk: &VkInstance, swapchain: &VkSwapchain) -> Result<VkPipeline, String> {
         let render_pass = VkPipeline::create_render_pass(&vk.device, &swapchain.image_format)?;
+        let descriptor_set_layout = VkPipeline::create_descriptor_set_layout(&vk.device)?;
         let (pipeline, pipeline_layout) =
-            VkPipeline::create_graphics_pipeline(&vk.device, &render_pass)?;
+            VkPipeline::create_graphics_pipeline(&vk.device, &render_pass, &descriptor_set_layout)?;
 
         return Ok(VkPipeline {
             render_pass,
             pipeline,
-            _pipeline_layout: pipeline_layout,
+            descriptor_set_layout,
+            pipeline_layout,
         });
     }
 
@@ -755,6 +762,7 @@ impl VkPipeline {
     fn create_graphics_pipeline(
         device: &Device,
         render_pass: &vk::RenderPass,
+        descriptor_set_layout: &vk::DescriptorSetLayout,
     ) -> Result<(vk::Pipeline, vk::PipelineLayout), String> {
         let frag = VkPipeline::read_spv_file("shaders/shader.frag.spv")?;
         let vert = VkPipeline::read_spv_file("shaders/shader.vert.spv")?;
@@ -813,7 +821,7 @@ impl VkPipeline {
             polygon_mode: vk::PolygonMode::FILL,
             line_width: 1.,
             cull_mode: vk::CullModeFlags::BACK,
-            front_face: vk::FrontFace::CLOCKWISE,
+            front_face: vk::FrontFace::COUNTER_CLOCKWISE,
             depth_bias_enable: vk::FALSE,
             depth_bias_constant_factor: 0.,
             depth_bias_clamp: 0.,
@@ -866,8 +874,8 @@ impl VkPipeline {
 
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
-            set_layout_count: 0,
-            p_set_layouts: std::ptr::null(),
+            set_layout_count: 1,
+            p_set_layouts: descriptor_set_layout,
             push_constant_range_count: 0,
             p_push_constant_ranges: std::ptr::null(),
             ..Default::default()
@@ -906,6 +914,32 @@ impl VkPipeline {
         };
 
         return Ok((pipeline, pipeline_layout));
+    }
+
+    fn create_descriptor_set_layout(device: &Device) -> Result<vk::DescriptorSetLayout, String> {
+        let ubo_layout_binding = vk::DescriptorSetLayoutBinding {
+            binding: 0,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            stage_flags: vk::ShaderStageFlags::VERTEX,
+            p_immutable_samplers: std::ptr::null(),
+            ..Default::default()
+        };
+
+        let create_info = vk::DescriptorSetLayoutCreateInfo {
+            s_type: vk::StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            binding_count: 1,
+            p_bindings: &ubo_layout_binding,
+            ..Default::default()
+        };
+
+        let descriptor_set_layout = unsafe {
+            device
+                .create_descriptor_set_layout(&create_info, None)
+                .map_err(|e| format!("Failed to create descriptor set layout: {}", e))?
+        };
+
+        return Ok(descriptor_set_layout);
     }
 
     fn create_shader_module(device: &Device, code: &Vec<u32>) -> Result<vk::ShaderModule, String> {
@@ -1254,6 +1288,13 @@ pub struct VkContext {
     sync_objects: VkSyncObjects,
     vertex_buffer: VkBuffer,
     index_buffer: VkBuffer,
+
+    uniform_buffers: Vec<vk::Buffer>,
+    uniform_buffers_memory: Vec<vk::DeviceMemory>,
+    uniform_buffers_mapped: Vec<*mut std::ffi::c_void>,
+
+    descriptor_pool: vk::DescriptorPool,
+    descriptor_sets: Vec<vk::DescriptorSet>,
 }
 
 impl VkContext {
@@ -1266,20 +1307,20 @@ impl VkContext {
 
         let vertices = [
             Vertex {
-                position: Vector::new([-0.5, -0.5]),
-                color: Vector::new([1.0, 0.0, 0.0]),
+                position: glam::Vec2::new(-0.5, -0.5),
+                color: glam::Vec3::new(1.0, 0.0, 0.0),
             },
             Vertex {
-                position: Vector::new([0.5, -0.5]),
-                color: Vector::new([0.0, 1.0, 0.0]),
+                position: glam::Vec2::new(0.5, -0.5),
+                color: glam::Vec3::new(0.0, 1.0, 0.0),
             },
             Vertex {
-                position: Vector::new([0.5, 0.5]),
-                color: Vector::new([0.0, 0.0, 1.0]),
+                position: glam::Vec2::new(0.5, 0.5),
+                color: glam::Vec3::new(0.0, 0.0, 1.0),
             },
             Vertex {
-                position: Vector::new([-0.5, 0.5]),
-                color: Vector::new([1.0, 1.0, 1.0]),
+                position: glam::Vec2::new(-0.5, 0.5),
+                color: glam::Vec3::new(1.0, 1.0, 1.0),
             },
         ];
 
@@ -1290,6 +1331,17 @@ impl VkContext {
         let index_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER;
         let index_buffer = VkBuffer::new(&instance, &command, &indices, index_usage)?;
 
+        let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
+            VkContext::create_uniform_buffers(&instance)?;
+
+        let descriptor_pool = VkContext::create_descriptor_pool(&instance.device)?;
+        let descriptor_sets = VkContext::create_descriptor_set(
+            &instance.device,
+            &descriptor_pool,
+            &render_pipeline.descriptor_set_layout,
+            &uniform_buffers,
+        )?;
+
         return Ok(VkContext {
             instance,
             swapchain,
@@ -1298,7 +1350,163 @@ impl VkContext {
             sync_objects,
             vertex_buffer,
             index_buffer,
+            uniform_buffers,
+            uniform_buffers_memory,
+            uniform_buffers_mapped,
+            descriptor_pool,
+            descriptor_sets,
         });
+    }
+
+    fn create_descriptor_pool(device: &Device) -> Result<vk::DescriptorPool, String> {
+        let pool_size = vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: MAX_FRAMES_IN_FLIGHT,
+        };
+
+        let create_info = vk::DescriptorPoolCreateInfo {
+            s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
+            pool_size_count: 1,
+            p_pool_sizes: &pool_size,
+            max_sets: MAX_FRAMES_IN_FLIGHT,
+            ..Default::default()
+        };
+
+        let descriptor_pool = unsafe {
+            device
+                .create_descriptor_pool(&create_info, None)
+                .map_err(|e| format!("Failed to create descriptor pool: {}", e))?
+        };
+        return Ok(descriptor_pool);
+    }
+
+    fn create_descriptor_set(
+        device: &Device,
+        descriptor_pool: &vk::DescriptorPool,
+        descriptor_set_layout: &vk::DescriptorSetLayout,
+        uniform_buffers: &Vec<vk::Buffer>,
+    ) -> Result<Vec<vk::DescriptorSet>, String> {
+        let layouts = vec![*descriptor_set_layout; MAX_FRAMES_IN_FLIGHT as usize];
+
+        let allocate_info = vk::DescriptorSetAllocateInfo {
+            s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+            descriptor_pool: *descriptor_pool,
+            descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
+            p_set_layouts: layouts.as_ptr(),
+            ..Default::default()
+        };
+
+        let descriptor_sets = unsafe {
+            device
+                .allocate_descriptor_sets(&allocate_info)
+                .map_err(|e| format!("Failed to allocate descriptor sets: {}", e))?
+        };
+
+        for index in 0..MAX_FRAMES_IN_FLIGHT {
+            let buffer_info = vk::DescriptorBufferInfo {
+                buffer: uniform_buffers[index as usize],
+                offset: 0,
+                range: std::mem::size_of::<UniformBufferObject>() as u64,
+            };
+
+            let descriptor_write = vk::WriteDescriptorSet {
+                s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+                dst_set: descriptor_sets[index as usize],
+                dst_binding: 0,
+                dst_array_element: 0,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                p_buffer_info: &buffer_info,
+                ..Default::default()
+            };
+
+            unsafe { device.update_descriptor_sets(&[descriptor_write], &[]) };
+        }
+
+        return Ok(descriptor_sets);
+    }
+
+    fn create_uniform_buffers(
+        vk: &VkInstance,
+    ) -> Result<(Vec<vk::Buffer>, Vec<vk::DeviceMemory>, Vec<*mut c_void>), String> {
+        let buffer_size: vk::DeviceSize = std::mem::size_of::<UniformBufferObject>() as u64;
+
+        let capacity = MAX_FRAMES_IN_FLIGHT as usize;
+        let mut uniform_buffers = Vec::with_capacity(capacity);
+        let mut uniform_buffers_memory = Vec::with_capacity(capacity);
+        let mut uniform_buffers_mapped = Vec::with_capacity(capacity);
+
+        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+            let usage = vk::BufferUsageFlags::UNIFORM_BUFFER;
+            let properties =
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+            let (buffer, buffer_memory) = VkBuffer::create_buffer(
+                &vk.instance,
+                &vk.physical_device,
+                &vk.device,
+                &buffer_size,
+                &usage,
+                &properties,
+            )
+            .unwrap();
+
+            let buffer_mapped = unsafe {
+                vk.device
+                    .map_memory(buffer_memory, 0, buffer_size, vk::MemoryMapFlags::empty())
+                    .map_err(|e| format!("Failed to map memory: {}", e))?
+            };
+
+            uniform_buffers.push(buffer);
+            uniform_buffers_memory.push(buffer_memory);
+            uniform_buffers_mapped.push(buffer_mapped);
+        }
+
+        return Ok((
+            uniform_buffers,
+            uniform_buffers_memory,
+            uniform_buffers_mapped,
+        ));
+    }
+
+    fn update_uniform_buffer(&mut self, current_image: u32) {
+        static mut START_TIME: Option<std::time::Instant> = None;
+
+        unsafe {
+            if START_TIME.is_none() {
+                START_TIME = Some(std::time::Instant::now());
+            }
+        }
+
+        let current_time = std::time::Instant::now();
+        let elapsed_time = unsafe {
+            current_time
+                .duration_since(START_TIME.unwrap())
+                .as_secs_f32()
+        };
+
+        let model = glam::Mat4::from_rotation_z((elapsed_time * 90.).to_radians());
+        let view = glam::Mat4::look_at_rh(
+            glam::Vec3::new(2.0, 2.0, 2.0), // Eye position
+            glam::Vec3::new(0.0, 0.0, 0.0), // Center position
+            glam::Vec3::new(0.0, 0.0, 1.0), // Up direction
+        );
+        let mut proj = glam::Mat4::perspective_rh(
+            45.0f32.to_radians(), // Field of view
+            self.swapchain.extent.width as f32 / self.swapchain.extent.height as f32, // Aspect ratio
+            0.1, // Near plane
+            10.0, // Far plane
+        );
+
+        proj.y_axis.y *= -1.;
+
+        let ubo = UniformBufferObject { model, view, proj };
+
+        let src = &ubo as *const _ as *const u8;
+        let dst = self.uniform_buffers_mapped[current_image as usize] as *mut u8;
+        let size = std::mem::size_of::<UniformBufferObject>();
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, dst, size);
+        }
     }
 
     pub fn draw_frame(&mut self) {
@@ -1322,6 +1530,8 @@ impl VkContext {
                 )
                 .unwrap()
         };
+
+        self.update_uniform_buffer(self.sync_objects.current_frame);
 
         let _ = unsafe {
             self.instance.device.reset_fences(&[
@@ -1489,6 +1699,17 @@ impl VkContext {
         };
 
         unsafe {
+            self.instance.device.cmd_bind_descriptor_sets(
+                *command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.render_pipeline.pipeline_layout,
+                0,
+                &[self.descriptor_sets[self.sync_objects.current_frame as usize]],
+                &[],
+            )
+        };
+
+        unsafe {
             self.instance.device.cmd_draw_indexed(
                 *command_buffer,
                 self.index_buffer.size as u32,
@@ -1515,6 +1736,14 @@ impl VkContext {
         self.swapchain.cleanup(&self.instance.device);
 
         unsafe {
+            self.instance
+                .device
+                .destroy_descriptor_set_layout(self.render_pipeline.descriptor_set_layout, None);
+
+            self.instance
+                .device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+
             self.instance
                 .device
                 .destroy_buffer(self.vertex_buffer.buffer, None);
