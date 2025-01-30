@@ -4,7 +4,7 @@ use std::fs::File;
 
 use ash::{khr, vk, Device, Entry, Instance};
 
-use lineal::{Vector, Matrix};
+use lineal::{Matrix, Vector};
 
 use ash_window;
 use winit::{
@@ -1085,12 +1085,12 @@ impl VkSyncObjects {
 
 struct VkBuffer {
     buffer: vk::Buffer,
-    size: vk::DeviceSize,
+    buffer_size: vk::DeviceSize,
     buffer_memory: vk::DeviceMemory,
 }
 
 impl VkBuffer {
-    pub fn new<f32: Copy>(
+    pub fn new<f32>(
         vk: &VkInstance,
         command: &VkCommand,
         data: &[f32],
@@ -1153,7 +1153,7 @@ impl VkBuffer {
 
         Ok(VkBuffer {
             buffer,
-            size: data.len() as u64,
+            buffer_size: data.len() as u64,
             buffer_memory,
         })
     }
@@ -1486,9 +1486,22 @@ impl VkContext {
                 .as_secs_f32()
         };
 
-        let model = lineal::rotate(Matrix::identity(), lineal::radian( 90. * elapsed_time), Vector::new([0., 0., 1.]));
-        let view = lineal::look_at(Vector::new([2., 2., 2.]), Vector::new([0., 0., 0.]), Vector::new([0., 0., 1.]));
-        let mut proj = lineal::projection(lineal::radian(45.), self.swapchain.extent.width as f32 / self.swapchain.extent.height as f32, 0.1, 10.);
+        let model = lineal::rotate(
+            Matrix::identity(),
+            lineal::radian(90. * elapsed_time),
+            Vector::new([0., 0., 1.]),
+        );
+        let view = lineal::look_at(
+            Vector::new([2., 2., 2.]),
+            Vector::new([0., 0., 0.]),
+            Vector::new([0., 0., 1.]),
+        );
+        let mut proj = lineal::projection(
+            lineal::radian(45.),
+            self.swapchain.extent.width as f32 / self.swapchain.extent.height as f32,
+            0.1,
+            10.,
+        );
 
         proj[1][1] = proj[1][1] * -1.;
 
@@ -1502,7 +1515,7 @@ impl VkContext {
         }
     }
 
-    pub fn draw_frame(&mut self) {
+    pub fn draw_frame(&mut self, window: &Window) {
         let _ = unsafe {
             self.instance.device.wait_for_fences(
                 &[self.sync_objects.in_flight_fences[self.sync_objects.current_frame as usize]],
@@ -1511,17 +1524,31 @@ impl VkContext {
             )
         };
 
-        let (image_index, _) = unsafe {
-            self.swapchain
-                .loader
-                .acquire_next_image(
-                    self.swapchain.instance,
-                    u64::MAX,
-                    self.sync_objects.image_available_semaphores
-                        [self.sync_objects.current_frame as usize],
-                    vk::Fence::null(),
-                )
-                .unwrap()
+        let acquire_result = unsafe {
+            self.swapchain.loader.acquire_next_image(
+                self.swapchain.instance,
+                u64::MAX,
+                self.sync_objects.image_available_semaphores
+                    [self.sync_objects.current_frame as usize],
+                vk::Fence::null(),
+            )
+        };
+
+        let image_index;
+        match acquire_result {
+            Ok((index, suboptimal)) => {
+                if suboptimal {
+                    self.recreate_swapchain(window);
+                    return;
+                }
+
+                image_index = index;
+            }
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                self.recreate_swapchain(window);
+                return;
+            }
+            Err(e) => panic!("Failed to acquire next image: {:?}", e),
         };
 
         self.update_uniform_buffer(self.sync_objects.current_frame);
@@ -1705,7 +1732,7 @@ impl VkContext {
         unsafe {
             self.instance.device.cmd_draw_indexed(
                 *command_buffer,
-                self.index_buffer.size as u32,
+                self.index_buffer.buffer_size as u32,
                 1,
                 0,
                 0,

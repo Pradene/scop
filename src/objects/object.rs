@@ -1,0 +1,213 @@
+use lineal::Vector;
+
+use crate::objects::lexer::{Lexer, Token};
+
+#[derive(Debug)]
+pub enum ObjError {
+    IoError(std::io::Error),
+    ParseError(String),
+    InvalidIndex,
+    UnexpectedToken,
+}
+
+impl From<std::num::ParseFloatError> for ObjError {
+    fn from(e: std::num::ParseFloatError) -> Self {
+        ObjError::ParseError(e.to_string())
+    }
+}
+
+#[derive(Debug)]
+pub struct FaceVertex {
+    pub vertex: usize,
+    pub texture: Option<usize>,
+    pub normal: Option<usize>,
+}
+
+pub type Face = Vec<FaceVertex>;
+
+#[derive(Debug)]
+pub struct Group {
+    pub name: String,
+    pub faces: Vec<Face>,
+}
+
+impl Group {
+    pub fn new() -> Self {
+        return Group {
+            name: String::new(),
+            faces: Vec::new(),
+        };
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.faces.is_empty();
+    }
+}
+
+#[derive(Debug)]
+pub struct Object {
+    pub groups: Vec<Group>,
+    pub vertices: Vec<Vector<f32, 3>>,
+    pub normals: Vec<Vector<f32, 3>>,
+}
+
+impl Object {
+    pub fn new() -> Self {
+        return Object {
+            groups: Vec::new(),
+            vertices: Vec::new(),
+            normals: Vec::new(),
+        };
+    }
+
+    pub fn parse(path: &str) -> Result<Object, String> {
+        let mut lexer = Lexer::new(path).unwrap();
+
+        let mut object = Object::new();
+        let mut group = Group::new();
+
+        while let Ok(token) = lexer.next_token() {
+            match token {
+                Token::Group => {
+                    if !group.is_empty() {
+                        object.groups.push(group);
+                        group = Group::new();
+                    }
+
+                    match lexer.next_token() {
+                        Ok(Token::Identifier(name)) => {
+                            group.name = name;
+                        }
+
+                        _ => {
+                            return Err(
+                                "Expected an identifier for group name, but got a different token."
+                                    .to_string(),
+                            );
+                        }
+                    }
+                }
+
+                Token::Vertice => {
+                    let mut coordinates = Vec::new();
+                    for _ in 0..3 {
+                        match lexer.next_token() {
+                            Ok(Token::Number(num)) => {
+                                coordinates.push(num);
+                            }
+
+                            _ => {
+                                return Err(
+                                    "Expected a number for vertex coordinate, but got something else."
+                                        .to_string()
+                                );
+                            }
+                        }
+                    }
+
+                    if coordinates.len() == 3 {
+                        object.vertices.push(Vector::try_from(coordinates).unwrap());
+                    } else {
+                        return Err(format!(
+                            "Error: Invalid number of vertex coordinates. Expected 3 but got {}",
+                            coordinates.len()
+                        ));
+                    }
+                }
+
+                Token::Normal => {
+                    let mut coordinates = Vec::new();
+                    for _ in 0..3 {
+                        match lexer.next_token() {
+                            Ok(Token::Number(num)) => {
+                                coordinates.push(num);
+                            }
+
+                            _ => {
+                                return Err(
+                                    "Expected a number for vertex coordinate, but got something else."
+                                        .to_string()
+                                );
+                            }
+                        }
+                    }
+
+                    if coordinates.len() == 3 {
+                        object.normals.push(Vector::try_from(coordinates).unwrap());
+                    } else {
+                        return Err(format!(
+                            "Error: Invalid number of vertex coordinates. Expected 3 but got {}",
+                            coordinates.len()
+                        ));
+                    }
+                }
+
+                Token::Face => {
+                    let mut face: Face = Vec::new();
+
+                    loop {
+                        let next_token = lexer.peek_token();
+                        match next_token {
+                            Ok(Token::Number(index)) => {
+                                let vertex_index = (index as usize).saturating_sub(1);
+                                let _ = lexer.next_token();
+
+                                let mut texture_index = None;
+                                let mut normal_index = None;
+
+                                if let Ok(Token::Slash) = lexer.peek_token() {
+                                    let _ = lexer.next_token();
+
+                                    if let Ok(Token::Number(index)) = lexer.peek_token() {
+                                        texture_index = Some((index as usize).saturating_sub(1));
+                                        let _ = lexer.next_token();
+                                    }
+
+                                    if let Ok(Token::Slash) = lexer.peek_token() {
+                                        let _ = lexer.next_token();
+
+                                        if let Ok(Token::Number(index)) = lexer.peek_token() {
+                                            normal_index = Some((index as usize).saturating_sub(1));
+                                            let _ = lexer.next_token();
+                                        }
+                                    }
+                                }
+
+                                face.push(FaceVertex {
+                                    vertex: vertex_index,
+                                    texture: texture_index,
+                                    normal: normal_index,
+                                });
+                            }
+
+                            Ok(_) => break,
+                            Err(_) => {
+                                return Err("Parsing error".to_string());
+                            }
+                        }
+                    }
+
+                    group.faces.push(face);
+                }
+
+                Token::Comment(_) => {
+                    continue;
+                }
+
+                Token::EOF => {
+                    break;
+                }
+
+                _ => {
+                    return Err(format!("{:?} not implemented", token));
+                }
+            }
+        }
+
+        if !group.is_empty() {
+            object.groups.push(group);
+        }
+
+        return Ok(object);
+    }
+}

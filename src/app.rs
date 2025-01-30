@@ -15,14 +15,11 @@ pub struct App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            println!("Creating window...");
             let window_attributes = Window::default_attributes().with_title("Scop");
             let window = event_loop
                 .create_window(window_attributes)
                 .expect("Failed to create window");
-            println!("Window created successfully.");
 
-            println!("Initializing Vulkan context...");
             match VkContext::new(&window) {
                 Ok(context) => {
                     self.context = Some(context);
@@ -41,8 +38,6 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
-                println!("The close button was pressed; stopping");
-
                 // if let Some(context) = &mut self.context {
                 //     context.cleanup();
                 // }
@@ -52,7 +47,7 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 if let Some(context) = &mut self.context {
-                    context.draw_frame();
+                    context.draw_frame(self.window.as_ref().unwrap());
                 }
 
                 self.window.as_ref().unwrap().request_redraw();

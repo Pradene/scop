@@ -35,7 +35,7 @@ impl Lexer {
         let reader = BufReader::with_capacity(BUFFER_SIZE, file);
 
         let mut lexer = Lexer {
-            reader: reader,
+            reader,
             col: 1,
             row: 1,
             buffer: Vec::new(),
