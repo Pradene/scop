@@ -4,6 +4,8 @@ use std::fs::File;
 
 use ash::{khr, vk, Device, Entry, Instance};
 
+use lineal::{Vector, Matrix};
+
 use ash_window;
 use winit::{
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
@@ -18,15 +20,15 @@ const DEVICE_EXTENSIONS: [&CStr; 1] = [vk::KHR_SWAPCHAIN_NAME];
 const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 
 struct UniformBufferObject {
-    model: glam::Mat4,
-    view: glam::Mat4,
-    proj: glam::Mat4,
+    model: Matrix<f32, 4, 4>,
+    view: Matrix<f32, 4, 4>,
+    proj: Matrix<f32, 4, 4>,
 }
 
 #[derive(Clone, Copy)]
 struct Vertex {
-    position: glam::Vec2,
-    color: glam::Vec3,
+    position: Vector<f32, 2>,
+    color: Vector<f32, 3>,
 }
 
 impl Vertex {
@@ -1088,13 +1090,13 @@ struct VkBuffer {
 }
 
 impl VkBuffer {
-    pub fn new<T: Copy>(
+    pub fn new<f32: Copy>(
         vk: &VkInstance,
         command: &VkCommand,
-        data: &[T],
+        data: &[f32],
         usage: vk::BufferUsageFlags,
     ) -> Result<VkBuffer, String> {
-        let size = (std::mem::size_of::<T>() * data.len()) as u64;
+        let size = (std::mem::size_of::<f32>() * data.len()) as u64;
 
         // Create a staging buffer
         let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
@@ -1118,7 +1120,7 @@ impl VkBuffer {
         };
 
         unsafe {
-            std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr as *mut T, data.len());
+            std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr as *mut f32, data.len());
             vk.device.unmap_memory(staging_buffer_memory);
         }
 
@@ -1307,20 +1309,20 @@ impl VkContext {
 
         let vertices = [
             Vertex {
-                position: glam::Vec2::new(-0.5, -0.5),
-                color: glam::Vec3::new(1.0, 0.0, 0.0),
+                position: Vector::new([-0.5, -0.5]),
+                color: Vector::new([1.0, 0.0, 0.0]),
             },
             Vertex {
-                position: glam::Vec2::new(0.5, -0.5),
-                color: glam::Vec3::new(0.0, 1.0, 0.0),
+                position: Vector::new([0.5, -0.5]),
+                color: Vector::new([0.0, 1.0, 0.0]),
             },
             Vertex {
-                position: glam::Vec2::new(0.5, 0.5),
-                color: glam::Vec3::new(0.0, 0.0, 1.0),
+                position: Vector::new([0.5, 0.5]),
+                color: Vector::new([0.0, 0.0, 1.0]),
             },
             Vertex {
-                position: glam::Vec2::new(-0.5, 0.5),
-                color: glam::Vec3::new(1.0, 1.0, 1.0),
+                position: Vector::new([-0.5, 0.5]),
+                color: Vector::new([1.0, 1.0, 1.0]),
             },
         ];
 
@@ -1484,20 +1486,11 @@ impl VkContext {
                 .as_secs_f32()
         };
 
-        let model = glam::Mat4::from_rotation_z((elapsed_time * 90.).to_radians());
-        let view = glam::Mat4::look_at_rh(
-            glam::Vec3::new(2.0, 2.0, 2.0), // Eye position
-            glam::Vec3::new(0.0, 0.0, 0.0), // Center position
-            glam::Vec3::new(0.0, 0.0, 1.0), // Up direction
-        );
-        let mut proj = glam::Mat4::perspective_rh(
-            45.0f32.to_radians(), // Field of view
-            self.swapchain.extent.width as f32 / self.swapchain.extent.height as f32, // Aspect ratio
-            0.1, // Near plane
-            10.0, // Far plane
-        );
+        let model = lineal::rotate(Matrix::identity(), lineal::radian( 90. * elapsed_time), Vector::new([0., 0., 1.]));
+        let view = lineal::look_at(Vector::new([2., 2., 2.]), Vector::new([0., 0., 0.]), Vector::new([0., 0., 1.]));
+        let mut proj = lineal::projection(lineal::radian(45.), self.swapchain.extent.width as f32 / self.swapchain.extent.height as f32, 0.1, 10.);
 
-        proj.y_axis.y *= -1.;
+        proj[1][1] = proj[1][1] * -1.;
 
         let ubo = UniformBufferObject { model, view, proj };
 

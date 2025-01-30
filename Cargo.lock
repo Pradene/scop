@@ -401,12 +401,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glam"
-version = "0.29.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc46dd3ec48fdd8e693a98d2b8bafae273a2d54c1de02a2a7e3d57d501f39677"
-
-[[package]]
 name = "hashbrown"
 version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -499,7 +493,7 @@ dependencies = [
 [[package]]
 name = "lineal"
 version = "0.1.0"
-source = "git+https://github.com/Pradene/lineal/?branch=main#3d396eef35f97c18faac2e65cd07f5743440149f"
+source = "git+https://github.com/Pradene/lineal/?branch=main#0be99126b9044613e133db57f6a2f177d545a232"
 dependencies = [
  "num",
 ]
@@ -1059,7 +1053,6 @@ version = "0.1.0"
 dependencies = [
  "ash",
  "ash-window",
- "glam",
  "lineal",
  "winit",
 ]
@@ -1761,9 +1754,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.6.25"
+version = "0.6.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad699df48212c6cc6eb4435f35500ac6fd3b9913324f938aea302022ce19d310"
+checksum = "1e90edd2ac1aa278a5c4599b1d89cf03074b610800f866d4026dc199d7929a28"
 dependencies = [
  "memchr",
 ]
