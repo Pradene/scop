@@ -4,7 +4,7 @@ use scop::objects::object::Object;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 fn main() -> Result<(), String> {
-    let object = Object::parse("assets/cube.obj").unwrap();
+    let _ = Object::parse("assets/cube.obj").unwrap();
 
     // Create the event loop
     let event_loop = EventLoop::new().map_err(|e| format!("Failed to create event loop: {}", e))?;
