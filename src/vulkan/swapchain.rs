@@ -1,14 +1,9 @@
 use ash::{khr, vk};
 use winit::window::Window;
 
-use crate::vulkan::{VkDevice, VkInstance, VkPhysicalDevice, VkPipeline, VkSurface};
+use crate::vulkan::{VkContext, VkDevice, VkInstance, VkPhysicalDevice, VkPipeline, VkSurface};
 
-#[derive(Clone)]
-pub struct SwapChainSupportDetails {
-    pub capabilities: vk::SurfaceCapabilitiesKHR,
-    pub formats: Vec<vk::SurfaceFormatKHR>,
-    pub present_modes: Vec<vk::PresentModeKHR>,
-}
+use super::{create_image_view, query_swapchain_support, create_image, find_depth_format};
 
 pub struct VkSwapchain {
     pub loader: khr::swapchain::Device,
@@ -17,7 +12,12 @@ pub struct VkSwapchain {
     pub image_format: vk::Format,
     pub extent: vk::Extent2D,
     pub image_views: Vec<vk::ImageView>,
+
     pub framebuffers: Vec<vk::Framebuffer>,
+
+    pub depth_image: vk::Image,
+    pub depth_image_view: vk::ImageView,
+    pub depth_image_memory: vk::DeviceMemory,
 }
 
 impl VkSwapchain {
@@ -28,7 +28,11 @@ impl VkSwapchain {
         physical_device: &VkPhysicalDevice,
         device: &VkDevice,
     ) -> Result<VkSwapchain, String> {
-        let support_details = &physical_device.swapchain_support;
+        let support_details = query_swapchain_support(
+            &physical_device.physical_device,
+            &surface.loader,
+            &surface.surface,
+        )?;
         let surface_format = VkSwapchain::choose_surface_format(&support_details.formats);
         let present_mode = VkSwapchain::choose_present_mode(&support_details.present_modes);
         let extent = VkSwapchain::choose_extent(window, &support_details.capabilities);
@@ -94,7 +98,12 @@ impl VkSwapchain {
             image_format,
             extent,
             image_views,
+
             framebuffers: Vec::new(),
+
+            depth_image: vk::Image::null(),
+            depth_image_memory: vk::DeviceMemory::null(),
+            depth_image_view: vk::ImageView::null(),
         });
     }
 
@@ -147,58 +156,58 @@ impl VkSwapchain {
 
     fn create_image_views(
         device: &VkDevice,
-        swapchain_images: &Vec<vk::Image>,
-        swapchain_image_format: &vk::Format,
+        images: &Vec<vk::Image>,
+        format: &vk::Format,
     ) -> Result<Vec<vk::ImageView>, String> {
         let mut swapchain_image_views: Vec<vk::ImageView> = Vec::new();
 
-        for image in swapchain_images {
-            let create_info = vk::ImageViewCreateInfo {
-                s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-                image: *image,
-                view_type: vk::ImageViewType::TYPE_2D,
-                format: *swapchain_image_format,
-                components: vk::ComponentMapping {
-                    r: vk::ComponentSwizzle::IDENTITY,
-                    b: vk::ComponentSwizzle::IDENTITY,
-                    g: vk::ComponentSwizzle::IDENTITY,
-                    a: vk::ComponentSwizzle::IDENTITY,
-                },
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                },
-                ..Default::default()
-            };
+        for image in images {
+            let image_view =
+                create_image_view(device, image, *format, vk::ImageAspectFlags::COLOR)?;
 
-            let image_view = unsafe {
-                device
-                    .device
-                    .create_image_view(&create_info, None)
-                    .map_err(|e| format!("Failed to create image view: {}", e))?
-            };
             swapchain_image_views.push(image_view);
         }
 
         return Ok(swapchain_image_views);
     }
 
-    fn create_framebuffers(
+    pub fn create_depth_ressources(&mut self, instance: &VkInstance, physical_device: &VkPhysicalDevice, device: &VkDevice) -> Result<(), String> {
+        let format = find_depth_format(instance, physical_device)?;
+
+        let (image, memory) = create_image(
+            instance,
+            physical_device,
+            device,
+            self.extent.width,
+            self.extent.height,
+            format,
+            vk::ImageTiling::OPTIMAL,
+            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL
+        )?;
+
+        let depth_image_view = create_image_view(device, &image, format, vk::ImageAspectFlags::DEPTH)?;
+
+        self.depth_image = image;
+        self.depth_image_memory = memory;
+        self.depth_image_view = depth_image_view;
+        
+        return Ok(());
+    }
+
+    pub fn create_framebuffers(
         &mut self,
         device: &VkDevice,
         render_pass: &vk::RenderPass,
     ) -> Result<(), String> {
         for swapchain_image_view in &self.image_views {
-            let attachment = swapchain_image_view;
+            let attachments = [*swapchain_image_view, self.depth_image_view];
 
             let framebuffer_create_info = vk::FramebufferCreateInfo {
                 s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
                 render_pass: *render_pass,
-                attachment_count: 1,
-                p_attachments: attachment,
+                attachment_count: attachments.len() as u32,
+                p_attachments: attachments.as_ptr(),
                 width: self.extent.width,
                 height: self.extent.height,
                 layers: 1,
@@ -249,10 +258,27 @@ impl VkSwapchain {
         self.cleanup(device);
         let mut swapchain =
             VkSwapchain::new(window, instance, surface, physical_device, device).unwrap();
+        
+        swapchain
+            .create_depth_ressources(instance, physical_device, device).unwrap();
+        
         swapchain
             .create_framebuffers(device, &pipeline.render_pass)
             .unwrap();
 
         *self = swapchain;
+    }
+}
+
+impl VkContext {
+    pub fn recreate_swapchain(&mut self, window: &Window) {
+        self.swapchain.recreate(
+            window,
+            &self.instance,
+            &self.surface,
+            &self.physical_device,
+            &self.device,
+            &self.pipeline,
+        );
     }
 }

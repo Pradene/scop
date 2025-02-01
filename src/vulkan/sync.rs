@@ -1,5 +1,5 @@
-use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
 use crate::vulkan::VkDevice;
+use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
 
 use ash::vk;
 

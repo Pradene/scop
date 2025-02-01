@@ -200,7 +200,7 @@ impl Lexer {
 
         while let Some(c) = self.char() {
             match c {
-                c if c.is_numeric() || c == '.' || c == '-' => {
+                c if !c.is_whitespace() => {
                     number.push(c);
                     self.advance()?;
                 }
@@ -216,9 +216,5 @@ impl Lexer {
         } else {
             Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid number"))
         }
-    }
-
-    pub fn position(&self) -> (usize, usize) {
-        return (self.row, self.col);
     }
 }

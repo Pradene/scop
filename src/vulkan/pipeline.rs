@@ -1,4 +1,4 @@
-use crate::vulkan::{Vertex, VkDevice, VkSwapchain};
+use crate::vulkan::{Vertex, VkDevice, find_depth_format, VkInstance, VkPhysicalDevice};
 
 use ash::vk;
 use std::ffi::CString;
@@ -12,8 +12,8 @@ pub struct VkPipeline {
 }
 
 impl VkPipeline {
-    pub fn new(device: &VkDevice, swapchain: &VkSwapchain) -> Result<VkPipeline, String> {
-        let render_pass = VkPipeline::create_render_pass(device, &swapchain.image_format)?;
+    pub fn new(instance: &VkInstance, physical_device: &VkPhysicalDevice, device: &VkDevice, format: vk::Format) -> Result<VkPipeline, String> {
+        let render_pass = VkPipeline::create_render_pass(instance, physical_device, device, format)?;
         let descriptor_set_layout = VkPipeline::create_descriptor_set_layout(device)?;
         let (pipeline, pipeline_layout) =
             VkPipeline::create_graphics_pipeline(device, &render_pass, &descriptor_set_layout)?;
@@ -27,11 +27,13 @@ impl VkPipeline {
     }
 
     fn create_render_pass(
+        instance: &VkInstance,
+        physical_device: &VkPhysicalDevice,
         device: &VkDevice,
-        swapchain_image_format: &vk::Format,
+        swapchain_format: vk::Format
     ) -> Result<vk::RenderPass, String> {
         let color_attachment = vk::AttachmentDescription {
-            format: *swapchain_image_format,
+            format: swapchain_format,
             samples: vk::SampleCountFlags::TYPE_1,
             load_op: vk::AttachmentLoadOp::CLEAR,
             store_op: vk::AttachmentStoreOp::STORE,
@@ -47,27 +49,46 @@ impl VkPipeline {
             layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         };
 
+        let depth_attachment = vk::AttachmentDescription {
+            format: find_depth_format(instance, physical_device)?,
+            samples: vk::SampleCountFlags::TYPE_1,
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::STORE,
+            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            ..Default::default()
+        };
+
+        let depth_attachment_ref = vk::AttachmentReference {
+            attachment: 1,
+            layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        };
+
         let subpass = vk::SubpassDescription {
             pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
             color_attachment_count: 1,
             p_color_attachments: &color_attachment_ref,
+            p_depth_stencil_attachment: &depth_attachment_ref,
             ..Default::default()
         };
 
         let dependency = vk::SubpassDependency {
             src_subpass: vk::SUBPASS_EXTERNAL,
             dst_subpass: 0,
-            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
             src_access_mask: vk::AccessFlags::empty(),
-            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
             ..Default::default()
         };
 
+        let attachments = [color_attachment, depth_attachment];
         let render_pass_create_info = vk::RenderPassCreateInfo {
             s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
-            attachment_count: 1,
-            p_attachments: &color_attachment,
+            attachment_count: attachments.len() as u32,
+            p_attachments: attachments.as_ptr(),
             subpass_count: 1,
             p_subpasses: &subpass,
             dependency_count: 1,
@@ -147,7 +168,7 @@ impl VkPipeline {
             polygon_mode: vk::PolygonMode::FILL,
             line_width: 1.,
             cull_mode: vk::CullModeFlags::BACK,
-            front_face: vk::FrontFace::COUNTER_CLOCKWISE,
+            front_face: vk::FrontFace::CLOCKWISE,
             depth_bias_enable: vk::FALSE,
             depth_bias_constant_factor: 0.,
             depth_bias_clamp: 0.,
@@ -163,6 +184,16 @@ impl VkPipeline {
             p_sample_mask: std::ptr::null(),
             alpha_to_coverage_enable: vk::FALSE,
             alpha_to_one_enable: vk::FALSE,
+            ..Default::default()
+        };
+
+        let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
+            s_type: vk::StructureType::PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            depth_test_enable: vk::TRUE,
+            depth_write_enable: vk::TRUE,
+            depth_compare_op: vk::CompareOp::LESS,
+            depth_bounds_test_enable: vk::FALSE,
+            stencil_test_enable: vk::FALSE,
             ..Default::default()
         };
 
@@ -225,6 +256,7 @@ impl VkPipeline {
             p_multisample_state: &multisampling,
             p_color_blend_state: &color_blending,
             p_dynamic_state: &dynamic_state,
+            p_depth_stencil_state: &depth_stencil,
             layout: pipeline_layout,
             render_pass: *render_pass,
             subpass: 0,

@@ -1,4 +1,4 @@
-use crate::vulkan::{VkCommand, VkDevice, VkInstance, VkPhysicalDevice};
+use crate::vulkan::{VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice};
 
 use ash::vk;
 
@@ -14,7 +14,7 @@ impl VkBuffer {
         physical_device: &VkPhysicalDevice,
         device: &VkDevice,
         queue: &vk::Queue,
-        command: &VkCommand,
+        command: &VkCommandPool,
         data: &[f32],
         usage: vk::BufferUsageFlags,
     ) -> Result<VkBuffer, String> {
@@ -121,7 +121,7 @@ impl VkBuffer {
 
     fn copy_buffer(
         device: &VkDevice,
-        command: &VkCommand,
+        command: &VkCommandPool,
         queue: &vk::Queue,
         src: &vk::Buffer,
         dst: &vk::Buffer,
@@ -190,7 +190,7 @@ impl VkBuffer {
         };
     }
 
-    fn find_memory_type(
+    pub fn find_memory_type(
         instance: &VkInstance,
         physical_device: &VkPhysicalDevice,
         type_filter: u32,

@@ -4,9 +4,7 @@ use std::ffi::CStr;
 use ash::{khr, vk, Instance};
 
 use crate::vulkan::DEVICE_EXTENSIONS;
-use crate::vulkan::{QueueFamiliesIndices, VkInstance, VkSurface};
-
-use super::SwapChainSupportDetails;
+use crate::vulkan::{QueueFamiliesIndices, SwapChainSupportDetails, VkInstance, VkSurface};
 
 pub struct VkPhysicalDevice {
     pub physical_device: vk::PhysicalDevice,
@@ -191,7 +189,7 @@ impl VkPhysicalDevice {
         };
     }
 
-    fn query_swapchain_support(
+    pub fn query_swapchain_support(
         physical_device: &vk::PhysicalDevice,
         surface_loader: &khr::surface::Instance,
         surface: &vk::SurfaceKHR,

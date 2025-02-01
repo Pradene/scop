@@ -1,2 +1,4 @@
-pub mod lexer;
-pub mod object;
+mod lexer;
+mod object;
+
+pub use object::*;

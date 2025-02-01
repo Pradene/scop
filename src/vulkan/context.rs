@@ -1,40 +1,42 @@
-use crate::vulkan::{VALIDATION_LAYERS_ENABLED, MAX_FRAMES_IN_FLIGHT};
-use crate::vulkan::{UniformBufferObject, Vertex};
+use crate::objects::Object;
+use crate::vulkan::UniformBufferObject;
 use crate::vulkan::{
-    VkBuffer, VkCommand, VkDevice, VkInstance, VkPhysicalDevice,
-    VkPipeline, VkSurface, VkSwapchain, VkSyncObjects,
+    VkBuffer, VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkPipeline, VkSurface,
+    VkSwapchain, VkSyncObjects
 };
+use crate::vulkan::{MAX_FRAMES_IN_FLIGHT, VALIDATION_LAYERS_ENABLED};
 
 use ash::vk;
 use lineal::{Matrix, Vector};
-use std::ffi::c_void;
 use winit::window::Window;
 
+use std::ffi::c_void;
+
 pub struct VkContext {
-    instance: VkInstance,
-    surface: VkSurface,
-    physical_device: VkPhysicalDevice,
-    device: VkDevice,
-    graphics_queue: vk::Queue,
-    present_queue: vk::Queue,
-    swapchain: VkSwapchain,
-    pipeline: VkPipeline,
-    command: VkCommand,
-    sync: VkSyncObjects,
-    frame: u32,
-    vertex_buffer: VkBuffer,
-    index_buffer: VkBuffer,
+    pub instance: VkInstance,
+    pub surface: VkSurface,
+    pub physical_device: VkPhysicalDevice,
+    pub device: VkDevice,
+    pub graphics_queue: vk::Queue,
+    pub present_queue: vk::Queue,
+    pub swapchain: VkSwapchain,
+    pub pipeline: VkPipeline,
+    pub command: VkCommandPool,
+    pub sync: VkSyncObjects,
+    pub frame: u32,
+    pub vertex_buffer: VkBuffer,
+    pub index_buffer: VkBuffer,
 
-    uniform_buffers: Vec<vk::Buffer>,
-    uniform_buffers_memory: Vec<vk::DeviceMemory>,
-    uniform_buffers_mapped: Vec<*mut std::ffi::c_void>,
+    pub uniform_buffers: Vec<vk::Buffer>,
+    pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
+    pub uniform_buffers_mapped: Vec<*mut std::ffi::c_void>,
 
-    descriptor_pool: vk::DescriptorPool,
-    descriptor_sets: Vec<vk::DescriptorSet>,
+    pub descriptor_pool: vk::DescriptorPool,
+    pub descriptor_sets: Vec<vk::DescriptorSet>,
 }
 
 impl VkContext {
-    pub fn new(window: &Window) -> Result<VkContext, String> {
+    pub fn new(window: &Window, object: &Object) -> Result<VkContext, String> {
         let instance = VkInstance::new(window)?;
         let surface = VkSurface::new(window, &instance)?;
         let physical_device = VkPhysicalDevice::new(&instance, &surface)?;
@@ -49,30 +51,15 @@ impl VkContext {
                 .device
                 .get_device_queue(physical_device.queue_families.present_family.unwrap(), 0)
         };
-        let swapchain = VkSwapchain::new(window, &instance, &surface, &physical_device, &device)?;
-        let pipeline = VkPipeline::new(&device, &swapchain)?;
-        let command = VkCommand::new(&physical_device, &device)?;
-        let sync = VkSyncObjects::new(&device)?;
+        let mut swapchain = VkSwapchain::new(window, &instance, &surface, &physical_device, &device)?;
+        let pipeline = VkPipeline::new(&instance, &physical_device, &device, swapchain.image_format)?;
+        let command = VkCommandPool::new(&physical_device, &device)?;
+                
+        swapchain.create_depth_ressources(&instance, &physical_device, &device)?;
+        swapchain.create_framebuffers(&device, &pipeline.render_pass)?;
 
-        let vertices = [
-            Vertex {
-                position: Vector::new([-0.5, -0.5]),
-                color: Vector::new([1.0, 0.0, 0.0]),
-            },
-            Vertex {
-                position: Vector::new([0.5, -0.5]),
-                color: Vector::new([0.0, 1.0, 0.0]),
-            },
-            Vertex {
-                position: Vector::new([0.5, 0.5]),
-                color: Vector::new([0.0, 0.0, 1.0]),
-            },
-            Vertex {
-                position: Vector::new([-0.5, 0.5]),
-                color: Vector::new([1.0, 1.0, 1.0]),
-            },
-        ];
-
+        let (vertices, indices) = object.get_vertices_and_indices();
+        
         let vertex_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER;
         let vertex_buffer = VkBuffer::new(
             &instance,
@@ -83,8 +70,7 @@ impl VkContext {
             &vertices,
             vertex_usage,
         )?;
-
-        let indices = [0, 1, 2, 2, 3, 0];
+        
         let index_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER;
         let index_buffer = VkBuffer::new(
             &instance,
@@ -95,10 +81,10 @@ impl VkContext {
             &indices,
             index_usage,
         )?;
-
+        
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
-            VkContext::create_uniform_buffers(&instance, &physical_device, &device)?;
-
+        VkContext::create_uniform_buffers(&instance, &physical_device, &device)?;
+        
         let descriptor_pool = VkContext::create_descriptor_pool(&device)?;
         let descriptor_sets = VkContext::create_descriptor_set(
             &device,
@@ -106,7 +92,9 @@ impl VkContext {
             &pipeline.descriptor_set_layout,
             &uniform_buffers,
         )?;
-
+        
+        let sync = VkSyncObjects::new(&device)?;
+        
         return Ok(VkContext {
             instance,
             surface,
@@ -267,18 +255,18 @@ impl VkContext {
         let model = lineal::rotate(
             Matrix::identity(),
             lineal::radian(90. * elapsed_time),
-            Vector::new([0., 0., 1.]),
+            Vector::new([0., 1., 0.]),
         );
         let view = lineal::look_at(
-            Vector::new([2., 2., 2.]),
+            Vector::new([0., 2., 200.]),
             Vector::new([0., 0., 0.]),
-            Vector::new([0., 0., 1.]),
+            Vector::new([0., 1., 0.]),
         );
         let mut proj = lineal::projection(
             lineal::radian(45.),
             self.swapchain.extent.width as f32 / self.swapchain.extent.height as f32,
             0.1,
-            10.,
+            500.,
         );
 
         proj[1][1] = proj[1][1] * -1.;
@@ -406,7 +394,17 @@ impl VkContext {
             float32: [0., 0., 0., 1.0],
         };
 
-        let clear_value = vk::ClearValue { color: clear_color };
+        let clear_color = vk::ClearValue {
+            color: clear_color
+        };
+        let clear_stencil = vk::ClearValue {
+            depth_stencil: vk::ClearDepthStencilValue {
+                depth: 1.,
+                stencil: 0
+            },
+        };
+
+        let clear_values  = [clear_color, clear_stencil];
 
         let render_pass_info = vk::RenderPassBeginInfo {
             s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
@@ -416,8 +414,8 @@ impl VkContext {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: self.swapchain.extent,
             },
-            clear_value_count: 1,
-            p_clear_values: &clear_value,
+            clear_value_count: clear_values.len() as u32,
+            p_clear_values: clear_values.as_ptr(),
             ..Default::default()
         };
 
@@ -561,16 +559,5 @@ impl VkContext {
                 .destroy_surface(self.surface.surface, None);
             self.instance.instance.destroy_instance(None);
         }
-    }
-
-    pub fn recreate_swapchain(&mut self, window: &Window) {
-        self.swapchain.recreate(
-            window,
-            &self.instance,
-            &self.surface,
-            &self.physical_device,
-            &self.device,
-            &self.pipeline,
-        );
     }
 }

@@ -9,7 +9,7 @@ pub struct UniformBufferObject {
 
 #[derive(Clone, Copy)]
 pub struct Vertex {
-    pub position: Vector<f32, 2>,
+    pub position: Vector<f32, 3>,
     pub color: Vector<f32, 3>,
 }
 
@@ -27,7 +27,7 @@ impl Vertex {
         let position_attribute = vk::VertexInputAttributeDescription {
             binding: 0,
             location: 0,
-            format: vk::Format::R32G32_SFLOAT,
+            format: vk::Format::R32G32B32_SFLOAT,
             offset: unsafe { &(*base).position as *const _ as u32 },
         };
 

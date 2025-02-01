@@ -1,4 +1,5 @@
-use crate::vulkan::VkContext;
+use crate::{objects::Object, vulkan::VkContext};
+
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -6,10 +7,10 @@ use winit::{
     window::{Window, WindowId},
 };
 
-#[derive(Default)]
 pub struct App {
     window: Option<Window>,
     context: Option<VkContext>,
+    object: Object,
 }
 
 impl ApplicationHandler for App {
@@ -20,7 +21,7 @@ impl ApplicationHandler for App {
                 .create_window(window_attributes)
                 .expect("Failed to create window");
 
-            match VkContext::new(&window) {
+            match VkContext::new(&window, &self.object) {
                 Ok(context) => {
                     self.context = Some(context);
                     println!("Vulkan context initialized successfully.");
@@ -61,5 +62,15 @@ impl ApplicationHandler for App {
 
             _ => (),
         }
+    }
+}
+
+impl App {
+    pub fn new(object: Object) -> App {
+        return App {
+            window: None,
+            context: None,
+            object,
+        };
     }
 }

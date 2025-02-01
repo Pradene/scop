@@ -1,3 +1,6 @@
+use rand::Rng;
+
+use crate::vulkan::Vertex;
 use lineal::Vector;
 
 use crate::objects::lexer::{Lexer, Token};
@@ -209,5 +212,34 @@ impl Object {
         }
 
         return Ok(object);
+    }
+
+    pub fn get_vertices_and_indices(&self) -> (Vec<Vertex>, Vec<u32>) {
+        let mut rng = rand::rng();
+
+        let vertices = self
+            .vertices
+            .iter()
+            .map(|v| Vertex {
+                position: v.clone(),
+                color: Vector::new([
+                    rng.random_range(0.0..1.0),
+                    rng.random_range(0.0..1.0),
+                    rng.random_range(0.0..1.0),
+                ]),
+            })
+            .collect::<Vec<Vertex>>();
+
+        let mut indices = Vec::new();
+
+        for group in &self.groups {
+            for face in &group.faces {
+                for face_vertex in face {
+                    indices.push(face_vertex.vertex as u32);
+                }
+            }
+        }
+
+        (vertices, indices)
     }
 }

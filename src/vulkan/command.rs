@@ -3,17 +3,20 @@ use crate::vulkan::{VkDevice, VkPhysicalDevice};
 
 use ash::vk;
 
-pub struct VkCommand {
+pub struct VkCommandPool {
     pub pool: vk::CommandPool,
     pub buffers: Vec<vk::CommandBuffer>,
 }
 
-impl VkCommand {
-    pub fn new(physical_device: &VkPhysicalDevice, device: &VkDevice) -> Result<VkCommand, String> {
-        let pool = VkCommand::create_pool(device, &physical_device)?;
-        let buffers = VkCommand::create_buffers(device, &pool)?;
+impl VkCommandPool {
+    pub fn new(
+        physical_device: &VkPhysicalDevice,
+        device: &VkDevice,
+    ) -> Result<VkCommandPool, String> {
+        let pool = VkCommandPool::create_pool(device, &physical_device)?;
+        let buffers = VkCommandPool::create_buffers(device, &pool)?;
 
-        return Ok(VkCommand { pool, buffers });
+        return Ok(VkCommandPool { pool, buffers });
     }
 
     fn create_pool(

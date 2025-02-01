@@ -1,14 +1,19 @@
-g pyramid
+# Pyramid object
 
-v  0  0  0
-v  1  0  0
-v  1  1  0
-v  0  1  0
-v  0.5  0.5  1.6
+# Vertices
+v  0.5   0    0.5  # Vertex 1 (Base - front-right)
+v  -0.5  0    0.5  # Vertex 2 (Base - front-left)
+v  0.5   0   -0.5  # Vertex 3 (Base - back-right)
+v  -0.5  0   -0.5  # Vertex 4 (Base - back-left)
+v  0     1.6   0    # Vertex 5 (Apex)
 
-f  4  1  2
-f  3  4  2
-f  5  2  1
-f  4  5  1
-f  3  5  4
-f  5  3  2
+# Corrected faces
+# Base (split into two triangles using diagonal 2-4)
+f  1  2  4  # First base triangle (front-right, front-left, back-left)
+f  1  4  3  # Second base triangle (front-right, back-left, back-right)
+
+# Side faces (connecting each base edge to apex)
+f  1  2  5  # Front edge
+f  2  4  5  # Left edge
+f  4  3  5  # Back edge
+f  3  1  5  # Right edge
