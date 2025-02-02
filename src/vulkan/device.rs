@@ -61,3 +61,11 @@ impl VkDevice {
         return Ok(VkDevice { device });
     }
 }
+
+impl Drop for VkDevice {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.destroy_device(None);
+        }
+    }
+}

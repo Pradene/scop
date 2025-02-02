@@ -1,127 +1,26 @@
-use crate::vulkan::{Vertex, VkDevice, find_depth_format, VkInstance, VkPhysicalDevice};
+use super::{Vertex, VkDevice, VkRenderPass, VkShaderModule};
 
 use ash::vk;
 use std::ffi::CString;
-use std::fs::File;
+use std::sync::Arc;
 
 pub struct VkPipeline {
-    pub render_pass: vk::RenderPass,
+    device: Arc<VkDevice>,
     pub pipeline: vk::Pipeline,
     pub descriptor_set_layout: vk::DescriptorSetLayout,
     pub pipeline_layout: vk::PipelineLayout,
 }
 
 impl VkPipeline {
-    pub fn new(instance: &VkInstance, physical_device: &VkPhysicalDevice, device: &VkDevice, format: vk::Format) -> Result<VkPipeline, String> {
-        let render_pass = VkPipeline::create_render_pass(instance, physical_device, device, format)?;
-        let descriptor_set_layout = VkPipeline::create_descriptor_set_layout(device)?;
-        let (pipeline, pipeline_layout) =
-            VkPipeline::create_graphics_pipeline(device, &render_pass, &descriptor_set_layout)?;
-
-        return Ok(VkPipeline {
-            render_pass,
-            pipeline,
-            descriptor_set_layout,
-            pipeline_layout,
-        });
-    }
-
-    fn create_render_pass(
-        instance: &VkInstance,
-        physical_device: &VkPhysicalDevice,
-        device: &VkDevice,
-        swapchain_format: vk::Format
-    ) -> Result<vk::RenderPass, String> {
-        let color_attachment = vk::AttachmentDescription {
-            format: swapchain_format,
-            samples: vk::SampleCountFlags::TYPE_1,
-            load_op: vk::AttachmentLoadOp::CLEAR,
-            store_op: vk::AttachmentStoreOp::STORE,
-            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
-            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
-            initial_layout: vk::ImageLayout::UNDEFINED,
-            final_layout: vk::ImageLayout::PRESENT_SRC_KHR,
-            ..Default::default()
-        };
-
-        let color_attachment_ref = vk::AttachmentReference {
-            attachment: 0,
-            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-        };
-
-        let depth_attachment = vk::AttachmentDescription {
-            format: find_depth_format(instance, physical_device)?,
-            samples: vk::SampleCountFlags::TYPE_1,
-            load_op: vk::AttachmentLoadOp::CLEAR,
-            store_op: vk::AttachmentStoreOp::STORE,
-            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
-            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
-            initial_layout: vk::ImageLayout::UNDEFINED,
-            final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            ..Default::default()
-        };
-
-        let depth_attachment_ref = vk::AttachmentReference {
-            attachment: 1,
-            layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        };
-
-        let subpass = vk::SubpassDescription {
-            pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
-            color_attachment_count: 1,
-            p_color_attachments: &color_attachment_ref,
-            p_depth_stencil_attachment: &depth_attachment_ref,
-            ..Default::default()
-        };
-
-        let dependency = vk::SubpassDependency {
-            src_subpass: vk::SUBPASS_EXTERNAL,
-            dst_subpass: 0,
-            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-            src_access_mask: vk::AccessFlags::empty(),
-            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-            ..Default::default()
-        };
-
-        let attachments = [color_attachment, depth_attachment];
-        let render_pass_create_info = vk::RenderPassCreateInfo {
-            s_type: vk::StructureType::RENDER_PASS_CREATE_INFO,
-            attachment_count: attachments.len() as u32,
-            p_attachments: attachments.as_ptr(),
-            subpass_count: 1,
-            p_subpasses: &subpass,
-            dependency_count: 1,
-            p_dependencies: &dependency,
-            ..Default::default()
-        };
-
-        let render_pass = unsafe {
-            device
-                .device
-                .create_render_pass(&render_pass_create_info, None)
-                .map_err(|e| format!("Failed to create render pass: {}", e))?
-        };
-
-        return Ok(render_pass);
-    }
-
-    fn create_graphics_pipeline(
-        device: &VkDevice,
-        render_pass: &vk::RenderPass,
-        descriptor_set_layout: &vk::DescriptorSetLayout,
-    ) -> Result<(vk::Pipeline, vk::PipelineLayout), String> {
-        let frag = VkPipeline::read_spv_file("shaders/shader.frag.spv")?;
-        let vert = VkPipeline::read_spv_file("shaders/shader.vert.spv")?;
-
-        let frag_shader_module = VkPipeline::create_shader_module(device, &frag)?;
-        let vert_shader_module = VkPipeline::create_shader_module(device, &vert)?;
+    pub fn new(device: Arc<VkDevice>, render_pass: &VkRenderPass) -> Result<VkPipeline, String> {
+        let frag_shader_module = VkShaderModule::new(device.clone(), "shaders/shader.frag.spv")?;
+        let vert_shader_module = VkShaderModule::new(device.clone(), "shaders/shader.vert.spv")?;
 
         let entrypoint = CString::new("main").unwrap();
         let vert_shader_create_info = vk::PipelineShaderStageCreateInfo {
             s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage: vk::ShaderStageFlags::VERTEX,
-            module: vert_shader_module,
+            module: vert_shader_module.shader,
             p_name: entrypoint.as_ptr(),
             ..Default::default()
         };
@@ -129,7 +28,7 @@ impl VkPipeline {
         let frag_shader_create_info = vk::PipelineShaderStageCreateInfo {
             s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage: vk::ShaderStageFlags::FRAGMENT,
-            module: frag_shader_module,
+            module: frag_shader_module.shader,
             p_name: entrypoint.as_ptr(),
             ..Default::default()
         };
@@ -229,10 +128,12 @@ impl VkPipeline {
             ..Default::default()
         };
 
+        let descriptor_set_layout = VkPipeline::create_descriptor_set_layout(&device)?;
+
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
             set_layout_count: 1,
-            p_set_layouts: descriptor_set_layout,
+            p_set_layouts: &descriptor_set_layout,
             push_constant_range_count: 0,
             p_push_constant_ranges: std::ptr::null(),
             ..Default::default()
@@ -258,7 +159,7 @@ impl VkPipeline {
             p_dynamic_state: &dynamic_state,
             p_depth_stencil_state: &depth_stencil,
             layout: pipeline_layout,
-            render_pass: *render_pass,
+            render_pass: render_pass.render_pass,
             subpass: 0,
             ..Default::default()
         };
@@ -273,7 +174,12 @@ impl VkPipeline {
                 .remove(0)
         };
 
-        return Ok((pipeline, pipeline_layout));
+        return Ok(VkPipeline {
+            device,
+            pipeline,
+            descriptor_set_layout,
+            pipeline_layout,
+        });
     }
 
     fn create_descriptor_set_layout(device: &VkDevice) -> Result<vk::DescriptorSetLayout, String> {
@@ -302,35 +208,18 @@ impl VkPipeline {
 
         return Ok(descriptor_set_layout);
     }
+}
 
-    fn create_shader_module(
-        device: &VkDevice,
-        code: &Vec<u32>,
-    ) -> Result<vk::ShaderModule, String> {
-        let create_info = vk::ShaderModuleCreateInfo {
-            s_type: vk::StructureType::SHADER_MODULE_CREATE_INFO,
-            code_size: code.len() * std::mem::size_of::<u32>(),
-            p_code: code.as_ptr(),
-            ..Default::default()
-        };
-
-        let shader_module = unsafe {
-            device
+impl Drop for VkPipeline {
+    fn drop(&mut self) {
+        unsafe {
+            self.device
                 .device
-                .create_shader_module(&create_info, None)
-                .map_err(|e| format!("Failed to create shader module: {}", e))?
-        };
-
-        return Ok(shader_module);
-    }
-
-    fn read_spv_file(path: &str) -> Result<Vec<u32>, String> {
-        let mut file =
-            File::open(path).map_err(|e| format!("Failed to open file {}: {}", path, e))?;
-
-        let content = ash::util::read_spv(&mut file)
-            .map_err(|e| format!("Failed to decode SPIR-V file {}: {}", path, e))?;
-
-        return Ok(content);
+                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+            self.device
+                .device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.device.destroy_pipeline(self.pipeline, None);
+        }
     }
 }

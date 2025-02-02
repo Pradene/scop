@@ -1,90 +1,125 @@
-use crate::objects::Object;
-use crate::vulkan::UniformBufferObject;
-use crate::vulkan::{
-    VkBuffer, VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkPipeline, VkSurface,
-    VkSwapchain, VkSyncObjects
-};
-use crate::vulkan::{MAX_FRAMES_IN_FLIGHT, VALIDATION_LAYERS_ENABLED};
-
 use ash::vk;
-use lineal::{Matrix, Vector};
-use winit::window::Window;
-
+use std::sync::Arc;
 use std::ffi::c_void;
 
+use lineal::{Vector, Matrix};
+
+use crate::objects::Object;
+use crate::vulkan::{query_swapchain_support, MAX_FRAMES_IN_FLIGHT, UniformBufferObject};
+use crate::vulkan::{
+    VkBuffer, VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkPipeline, VkQueue,
+    VkRenderPass, VkSurface, VkSwapchain, VkSyncObjects
+};
+
+use winit::window::Window;
+
 pub struct VkContext {
-    pub instance: VkInstance,
-    pub surface: VkSurface,
-    pub physical_device: VkPhysicalDevice,
-    pub device: VkDevice,
-    pub graphics_queue: vk::Queue,
-    pub present_queue: vk::Queue,
-    pub swapchain: VkSwapchain,
-    pub pipeline: VkPipeline,
-    pub command: VkCommandPool,
     pub sync: VkSyncObjects,
-    pub frame: u32,
-    pub vertex_buffer: VkBuffer,
-    pub index_buffer: VkBuffer,
+    
+    pub descriptor_pool: vk::DescriptorPool,
+    pub descriptor_sets: Vec<vk::DescriptorSet>,
+
 
     pub uniform_buffers: Vec<vk::Buffer>,
     pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
     pub uniform_buffers_mapped: Vec<*mut std::ffi::c_void>,
-
-    pub descriptor_pool: vk::DescriptorPool,
-    pub descriptor_sets: Vec<vk::DescriptorSet>,
+    
+    pub vertex_buffer: VkBuffer,
+    pub index_buffer: VkBuffer,
+    
+    pub command_pool: VkCommandPool,
+    pub render_pass: VkRenderPass,
+    pub pipeline: VkPipeline,
+    
+    pub swapchain: VkSwapchain,
+    
+    pub present_queue: VkQueue,
+    pub graphics_queue: VkQueue,
+    
+    pub device: Arc<VkDevice>,
+    pub physical_device: VkPhysicalDevice,
+    pub surface: VkSurface,
+    pub instance: VkInstance,
+    pub frame: u32,
 }
 
 impl VkContext {
     pub fn new(window: &Window, object: &Object) -> Result<VkContext, String> {
         let instance = VkInstance::new(window)?;
+
         let surface = VkSurface::new(window, &instance)?;
+
         let physical_device = VkPhysicalDevice::new(&instance, &surface)?;
-        let device = VkDevice::new(&instance, &physical_device)?;
-        let graphics_queue = unsafe {
-            device
-                .device
-                .get_device_queue(physical_device.queue_families.graphics_family.unwrap(), 0)
-        };
-        let present_queue = unsafe {
-            device
-                .device
-                .get_device_queue(physical_device.queue_families.present_family.unwrap(), 0)
-        };
-        let mut swapchain = VkSwapchain::new(window, &instance, &surface, &physical_device, &device)?;
-        let pipeline = VkPipeline::new(&instance, &physical_device, &device, swapchain.image_format)?;
-        let command = VkCommandPool::new(&physical_device, &device)?;
-                
-        swapchain.create_depth_ressources(&instance, &physical_device, &device)?;
-        swapchain.create_framebuffers(&device, &pipeline.render_pass)?;
+
+        let device = Arc::new(VkDevice::new(&instance, &physical_device)?);
+
+        let queue_family_index = physical_device.queue_families.graphics_family.unwrap();
+        let graphics_queue = VkQueue::new(device.clone(), queue_family_index);
+
+        let queue_family_index = physical_device.queue_families.present_family.unwrap();
+        let present_queue = VkQueue::new(device.clone(), queue_family_index);
+
+        let support_details = query_swapchain_support(
+            &physical_device.physical_device,
+            &surface.loader,
+            &surface.surface,
+        )?;
+
+        let capabilities = support_details.capabilities;
+        let surface_format = VkContext::choose_surface_format(&support_details.formats);
+        let present_mode = VkContext::choose_present_mode(&support_details.present_modes);
+        let extent = VkContext::choose_extent(window, &support_details.capabilities);
+
+        let render_pass = VkRenderPass::new(
+            &instance,
+            &physical_device,
+            device.clone(),
+            surface_format.format,
+        )?;
+
+        let swapchain = VkSwapchain::new(
+            &instance,
+            &surface,
+            &physical_device,
+            device.clone(),
+            &render_pass,
+            capabilities,
+            surface_format,
+            present_mode,
+            extent,
+        )?;
+
+        let pipeline = VkPipeline::new(device.clone(), &render_pass)?;
+
+        let command_pool = VkCommandPool::new(&physical_device, device.clone())?;
 
         let (vertices, indices) = object.get_vertices_and_indices();
-        
+
         let vertex_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER;
         let vertex_buffer = VkBuffer::new(
             &instance,
             &physical_device,
-            &device,
+            device.clone(),
             &graphics_queue,
-            &command,
+            &command_pool,
             &vertices,
             vertex_usage,
         )?;
-        
+
         let index_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER;
         let index_buffer = VkBuffer::new(
             &instance,
             &physical_device,
-            &device,
+            device.clone(),
             &graphics_queue,
-            &command,
+            &command_pool,
             &indices,
             index_usage,
         )?;
-        
+
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
-        VkContext::create_uniform_buffers(&instance, &physical_device, &device)?;
-        
+            VkContext::create_uniform_buffers(&instance, &physical_device, &device)?;
+
         let descriptor_pool = VkContext::create_descriptor_pool(&device)?;
         let descriptor_sets = VkContext::create_descriptor_set(
             &device,
@@ -92,9 +127,9 @@ impl VkContext {
             &pipeline.descriptor_set_layout,
             &uniform_buffers,
         )?;
-        
-        let sync = VkSyncObjects::new(&device)?;
-        
+
+        let sync = VkSyncObjects::new(device.clone())?;
+
         return Ok(VkContext {
             instance,
             surface,
@@ -103,9 +138,9 @@ impl VkContext {
             graphics_queue,
             present_queue,
             swapchain,
+            render_pass,
             pipeline,
-            command,
-            sync,
+            command_pool,
             frame: 0,
             vertex_buffer,
             index_buffer,
@@ -114,7 +149,55 @@ impl VkContext {
             uniform_buffers_mapped,
             descriptor_pool,
             descriptor_sets,
+            sync,
         });
+    }
+
+    fn choose_surface_format(
+        available_formats: &Vec<vk::SurfaceFormatKHR>,
+    ) -> vk::SurfaceFormatKHR {
+        for available_format in available_formats {
+            if available_format.format == vk::Format::B8G8R8A8_SRGB
+                && available_format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+            {
+                return *available_format;
+            }
+        }
+
+        return available_formats[0];
+    }
+
+    fn choose_present_mode(
+        available_present_modes: &Vec<vk::PresentModeKHR>,
+    ) -> vk::PresentModeKHR {
+        for available_present_mode in available_present_modes {
+            if *available_present_mode == vk::PresentModeKHR::MAILBOX {
+                return *available_present_mode;
+            }
+        }
+
+        return vk::PresentModeKHR::FIFO;
+    }
+
+    fn choose_extent(window: &Window, capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
+        if capabilities.current_extent.width != u32::MAX {
+            return capabilities.current_extent;
+        } else {
+            let (width, height): (u32, u32) = window.inner_size().into();
+
+            let extent = vk::Extent2D {
+                width: width.clamp(
+                    capabilities.min_image_extent.width,
+                    capabilities.max_image_extent.width,
+                ),
+                height: height.clamp(
+                    capabilities.min_image_extent.height,
+                    capabilities.max_image_extent.height,
+                ),
+            };
+
+            return extent;
+        }
     }
 
     fn create_descriptor_pool(device: &VkDevice) -> Result<vk::DescriptorPool, String> {
@@ -292,7 +375,7 @@ impl VkContext {
 
         let acquire_result = unsafe {
             self.swapchain.loader.acquire_next_image(
-                self.swapchain.instance,
+                self.swapchain.swapchain,
                 u64::MAX,
                 self.sync.image_available_semaphores[self.frame as usize],
                 vk::Fence::null(),
@@ -303,14 +386,14 @@ impl VkContext {
         match acquire_result {
             Ok((index, suboptimal)) => {
                 if suboptimal {
-                    self.recreate_swapchain(window);
+                    // self.resize(window);
                     return;
                 }
 
                 image_index = index;
             }
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                self.recreate_swapchain(window);
+                // self.recreate_swapchain(window);
                 return;
             }
             Err(e) => panic!("Failed to acquire next image: {:?}", e),
@@ -326,12 +409,12 @@ impl VkContext {
 
         let _ = unsafe {
             self.device.device.reset_command_buffer(
-                self.command.buffers[self.frame as usize],
+                self.command_pool.buffers[self.frame as usize],
                 vk::CommandBufferResetFlags::empty(),
             )
         };
 
-        let _ = self.record_command_buffer(&self.command.buffers[self.frame as usize], image_index);
+        let _ = self.record_command_buffer(&self.command_pool.buffers[self.frame as usize], image_index);
 
         let signal_semaphores = [self.sync.render_finished_semaphores[self.frame as usize]];
         let wait_semaphores = [self.sync.image_available_semaphores[self.frame as usize]];
@@ -343,7 +426,7 @@ impl VkContext {
             p_wait_semaphores: wait_semaphores.as_ptr(),
             p_wait_dst_stage_mask: wait_stages.as_ptr(),
             command_buffer_count: 1,
-            p_command_buffers: &self.command.buffers[self.frame as usize],
+            p_command_buffers: &self.command_pool.buffers[self.frame as usize],
             signal_semaphore_count: signal_semaphores.len() as u32,
             p_signal_semaphores: signal_semaphores.as_ptr(),
             ..Default::default()
@@ -351,7 +434,7 @@ impl VkContext {
 
         let _ = unsafe {
             self.device.device.queue_submit(
-                self.graphics_queue,
+                self.graphics_queue.queue,
                 &[submit_info],
                 self.sync.in_flight_fences[self.frame as usize],
             )
@@ -362,7 +445,7 @@ impl VkContext {
             wait_semaphore_count: 1,
             p_wait_semaphores: signal_semaphores.as_ptr(),
             swapchain_count: 1,
-            p_swapchains: [self.swapchain.instance].as_ptr(),
+            p_swapchains: [self.swapchain.swapchain].as_ptr(),
             p_image_indices: &image_index,
             p_results: std::ptr::null_mut(),
             ..Default::default()
@@ -371,7 +454,7 @@ impl VkContext {
         let _ = unsafe {
             self.swapchain
                 .loader
-                .queue_present(self.present_queue, &present_info)
+                .queue_present(self.present_queue.queue, &present_info)
                 .unwrap()
         };
 
@@ -394,21 +477,19 @@ impl VkContext {
             float32: [0., 0., 0., 1.0],
         };
 
-        let clear_color = vk::ClearValue {
-            color: clear_color
-        };
+        let clear_color = vk::ClearValue { color: clear_color };
         let clear_stencil = vk::ClearValue {
             depth_stencil: vk::ClearDepthStencilValue {
                 depth: 1.,
-                stencil: 0
+                stencil: 0,
             },
         };
 
-        let clear_values  = [clear_color, clear_stencil];
+        let clear_values = [clear_color, clear_stencil];
 
         let render_pass_info = vk::RenderPassBeginInfo {
             s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
-            render_pass: self.pipeline.render_pass,
+            render_pass: self.render_pass.render_pass,
             framebuffer: self.swapchain.framebuffers[image_index as usize],
             render_area: vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
@@ -501,63 +582,19 @@ impl VkContext {
 
         return Ok(());
     }
+}
 
-    pub fn cleanup(&mut self) {
-        self.swapchain.cleanup(&self.device);
-
+impl Drop for VkContext {
+    fn drop(&mut self) {
         unsafe {
-            self.device
-                .device
-                .destroy_descriptor_set_layout(self.pipeline.descriptor_set_layout, None);
-
-            self.device
-                .device
-                .destroy_descriptor_pool(self.descriptor_pool, None);
-
-            self.device
-                .device
-                .destroy_buffer(self.vertex_buffer.buffer, None);
-            self.device
-                .device
-                .free_memory(self.vertex_buffer.memory, None);
-
-            self.device
-                .device
-                .destroy_buffer(self.index_buffer.buffer, None);
-            self.device
-                .device
-                .free_memory(self.index_buffer.memory, None);
-
-            self.device
-                .device
-                .destroy_pipeline(self.pipeline.pipeline, None);
-            self.device
-                .device
-                .destroy_render_pass(self.pipeline.render_pass, None);
-
-            for index in 0..MAX_FRAMES_IN_FLIGHT {
-                self.device
-                    .device
-                    .destroy_semaphore(self.sync.render_finished_semaphores[index as usize], None);
-                self.device
-                    .device
-                    .destroy_semaphore(self.sync.image_available_semaphores[index as usize], None);
-                self.device
-                    .device
-                    .destroy_fence(self.sync.in_flight_fences[index as usize], None);
+            self.device.device.device_wait_idle();
+            
+            for i  in 0..self.uniform_buffers.len() {
+                self.device.device.destroy_buffer(self.uniform_buffers[i], None);
+                self.device.device.free_memory(self.uniform_buffers_memory[i], None);
             }
 
-            self.device
-                .device
-                .destroy_command_pool(self.command.pool, None);
-            self.device.device.destroy_device(None);
-
-            if VALIDATION_LAYERS_ENABLED {}
-
-            self.surface
-                .loader
-                .destroy_surface(self.surface.surface, None);
-            self.instance.instance.destroy_instance(None);
+            self.device.device.destroy_descriptor_pool(self.descriptor_pool, None);
         }
     }
 }

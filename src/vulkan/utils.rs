@@ -1,4 +1,4 @@
-use ash::{vk, khr};
+use ash::{khr, vk};
 
 use crate::vulkan::{VkInstance, VkPhysicalDevice};
 
@@ -40,14 +40,8 @@ pub fn find_depth_format(
 
     let tiling = vk::ImageTiling::OPTIMAL;
     let features = vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT;
-    
-    return find_supported_format(
-        instance,
-        physical_device,
-        &candidates,
-        tiling,
-        features,
-    );
+
+    return find_supported_format(instance, physical_device, &candidates, tiling, features);
 }
 
 #[derive(Clone)]

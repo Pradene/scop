@@ -220,8 +220,14 @@ impl Object {
         let vertices = self
             .vertices
             .iter()
-            .map(|v| Vertex {
+            .enumerate()
+            .map(|(i, v)| Vertex {
                 position: v.clone(),
+                normal: if i < self.normals.len() {
+                    self.normals[i].clone()
+                } else {
+                    Vector::new([1., 0., 0.])
+                },
                 color: Vector::new([
                     rng.random_range(0.0..1.0),
                     rng.random_range(0.0..1.0),
@@ -240,6 +246,6 @@ impl Object {
             }
         }
 
-        (vertices, indices)
+        return (vertices, indices);
     }
 }

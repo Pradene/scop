@@ -105,3 +105,11 @@ impl VkInstance {
         return Ok(instance);
     }
 }
+
+impl Drop for VkInstance {
+    fn drop(&mut self) {
+        unsafe {
+            self.instance.destroy_instance(None);
+        }
+    }
+}

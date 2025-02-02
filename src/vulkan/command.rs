@@ -2,8 +2,10 @@ use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
 use crate::vulkan::{VkDevice, VkPhysicalDevice};
 
 use ash::vk;
+use std::sync::Arc;
 
 pub struct VkCommandPool {
+    device: Arc<VkDevice>,
     pub pool: vk::CommandPool,
     pub buffers: Vec<vk::CommandBuffer>,
 }
@@ -11,12 +13,16 @@ pub struct VkCommandPool {
 impl VkCommandPool {
     pub fn new(
         physical_device: &VkPhysicalDevice,
-        device: &VkDevice,
+        device: Arc<VkDevice>,
     ) -> Result<VkCommandPool, String> {
-        let pool = VkCommandPool::create_pool(device, &physical_device)?;
-        let buffers = VkCommandPool::create_buffers(device, &pool)?;
+        let pool = VkCommandPool::create_pool(&device, &physical_device)?;
+        let buffers = VkCommandPool::create_buffers(&device, &pool)?;
 
-        return Ok(VkCommandPool { pool, buffers });
+        return Ok(VkCommandPool {
+            device,
+            pool,
+            buffers,
+        });
     }
 
     fn create_pool(
@@ -60,5 +66,16 @@ impl VkCommandPool {
         };
 
         return Ok(command_buffer);
+    }
+}
+
+impl Drop for VkCommandPool {
+    fn drop(&mut self) {
+        unsafe {
+            self.device
+                .device
+                .free_command_buffers(self.pool, &self.buffers);
+            self.device.device.destroy_command_pool(self.pool, None);
+        }
     }
 }

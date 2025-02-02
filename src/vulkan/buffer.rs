@@ -1,8 +1,10 @@
-use crate::vulkan::{VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice};
+use crate::vulkan::{VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkQueue};
 
 use ash::vk;
+use std::sync::Arc;
 
 pub struct VkBuffer {
+    device: Arc<VkDevice>,
     pub buffer: vk::Buffer,
     pub size: vk::DeviceSize,
     pub memory: vk::DeviceMemory,
@@ -12,8 +14,8 @@ impl VkBuffer {
     pub fn new<f32>(
         instance: &VkInstance,
         physical_device: &VkPhysicalDevice,
-        device: &VkDevice,
-        queue: &vk::Queue,
+        device: Arc<VkDevice>,
+        queue: &VkQueue,
         command: &VkCommandPool,
         data: &[f32],
         usage: vk::BufferUsageFlags,
@@ -28,7 +30,7 @@ impl VkBuffer {
         let (staging_buffer, staging_buffer_memory) = Self::create_buffer(
             instance,
             physical_device,
-            device,
+            &device,
             &size,
             &staging_usage,
             &staging_properties,
@@ -52,14 +54,21 @@ impl VkBuffer {
         let (buffer, memory) = Self::create_buffer(
             instance,
             physical_device,
-            device,
+            &device,
             &size,
             &usage,
             &target_properties,
         )?;
 
         // Copy data from the staging buffer to the target buffer
-        Self::copy_buffer(device, &command, &queue, &staging_buffer, &buffer, &size);
+        Self::copy_buffer(
+            &device,
+            &command,
+            &queue.queue,
+            &staging_buffer,
+            &buffer,
+            &size,
+        );
 
         // Cleanup staging buffer
         unsafe {
@@ -68,6 +77,7 @@ impl VkBuffer {
         }
 
         Ok(VkBuffer {
+            device,
             buffer,
             size: data.len() as u64,
             memory,
@@ -212,5 +222,14 @@ impl VkBuffer {
         }
 
         return Err("Failed to find suitable memory type".to_string());
+    }
+}
+
+impl Drop for VkBuffer {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.device.free_memory(self.memory, None);
+            self.device.device.destroy_buffer(self.buffer, None);
+        }
     }
 }

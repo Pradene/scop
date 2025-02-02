@@ -45,3 +45,11 @@ impl VkSurface {
         return Ok(surface);
     }
 }
+
+impl Drop for VkSurface {
+    fn drop(&mut self) {
+        unsafe {
+            self.loader.destroy_surface(self.surface, None);
+        }
+    }
+}

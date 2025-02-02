@@ -39,10 +39,6 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
-                // if let Some(context) = &mut self.context {
-                //     context.cleanup();
-                // }
-
                 event_loop.exit();
             }
 
@@ -55,9 +51,9 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::Resized(_) => {
-                if let Some(context) = &mut self.context {
-                    context.recreate_swapchain(&self.window.as_ref().unwrap());
-                }
+                // if let Some(context) = &mut self.context {
+                //     context.recreate_swapchain(&self.window.as_ref().unwrap());
+                // }
             }
 
             _ => (),
