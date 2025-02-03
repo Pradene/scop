@@ -341,7 +341,7 @@ impl VkContext {
             Vector::new([0., 1., 0.]),
         );
         let view = lineal::look_at(
-            Vector::new([0., 2., 200.]),
+            Vector::new([0., 0., 20.]),
             Vector::new([0., 0., 0.]),
             Vector::new([0., 1., 0.]),
         );
@@ -349,7 +349,7 @@ impl VkContext {
             lineal::radian(45.),
             self.swapchain.extent.width as f32 / self.swapchain.extent.height as f32,
             0.1,
-            500.,
+            50.,
         );
 
         proj[1][1] = proj[1][1] * -1.;
@@ -386,14 +386,14 @@ impl VkContext {
         match acquire_result {
             Ok((index, suboptimal)) => {
                 if suboptimal {
-                    // self.resize(window);
+                    self.resize(window).unwrap();
                     return;
                 }
 
                 image_index = index;
             }
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                // self.recreate_swapchain(window);
+                self.resize(window).unwrap();
                 return;
             }
             Err(e) => panic!("Failed to acquire next image: {:?}", e),
@@ -582,12 +582,43 @@ impl VkContext {
 
         return Ok(());
     }
+
+    pub fn resize(&mut self, window: &Window) -> Result<(), String> {
+        let _ = unsafe {
+            self.device.device.device_wait_idle()
+        };
+        
+        let support_details = query_swapchain_support(
+            &self.physical_device.physical_device,
+            &self.surface.loader,
+            &self.surface.surface,
+        )?;
+
+        let capabilities = support_details.capabilities;
+        let surface_format = VkContext::choose_surface_format(&support_details.formats);
+        let present_mode = VkContext::choose_present_mode(&support_details.present_modes);
+        let extent = VkContext::choose_extent(window, &support_details.capabilities);
+
+        self.swapchain.resize(
+            &self.instance,
+            &self.surface,
+            &self.physical_device,
+            self.device.clone(),
+            &self.render_pass,
+            capabilities,
+            surface_format,
+            present_mode,
+            extent
+        );
+
+        return Ok(());
+    }
 }
 
 impl Drop for VkContext {
     fn drop(&mut self) {
         unsafe {
-            self.device.device.device_wait_idle();
+            let _ = self.device.device.device_wait_idle();
             
             for i  in 0..self.uniform_buffers.len() {
                 self.device.device.destroy_buffer(self.uniform_buffers[i], None);

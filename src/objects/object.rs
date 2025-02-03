@@ -19,7 +19,7 @@ impl From<std::num::ParseFloatError> for ObjError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FaceVertex {
     pub vertex: usize,
     pub texture: Option<usize>,
@@ -190,7 +190,10 @@ impl Object {
                         }
                     }
 
-                    group.faces.push(face);
+                    let triangles = Object::triangulate_face(&face);
+                    for triangle in triangles {
+                        group.faces.push(triangle);
+                    }
                 }
 
                 Token::Comment(_) => {
@@ -212,6 +215,25 @@ impl Object {
         }
 
         return Ok(object);
+    }
+
+    fn triangulate_face(face: &[FaceVertex]) -> Vec<Face> {
+        let mut triangles: Vec<Face> = Vec::new();
+
+        if face.len() <= 3 {
+            triangles.push(face.to_vec());
+            return triangles;
+        }
+
+        for i in 0..face.len() - 1 {
+            triangles.push(vec![
+                face[0].clone(),
+                face[i].clone(),
+                face[i + 1].clone()
+            ])
+        }
+
+        return triangles;
     }
 
     pub fn get_vertices_and_indices(&self) -> (Vec<Vertex>, Vec<u32>) {

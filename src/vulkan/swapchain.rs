@@ -1,8 +1,8 @@
+use ash::khr::swapchain;
 use ash::{khr, vk};
 use std::sync::Arc;
-use winit::window::Window;
 
-use super::{create_image, create_image_view, find_depth_format, SwapChainSupportDetails};
+use super::{create_image, create_image_view, find_depth_format};
 use super::{VkDevice, VkInstance, VkPhysicalDevice, VkQueue, VkRenderPass, VkSurface};
 
 pub struct VkSwapchain {
@@ -218,24 +218,34 @@ impl VkSwapchain {
         };
     }
 
-    // pub fn resize(
-    //     &mut self,
-    //     window: &Window,
-    //     instance: &VkInstance,
-    //     surface: &VkSurface,
-    //     physical_device: &VkPhysicalDevice,
-    // ) {
-    //     let _ = unsafe { self.device.device.device_wait_idle() };
+    pub fn resize(
+        &mut self,
+        instance: &VkInstance,
+        surface: &VkSurface,
+        physical_device: &VkPhysicalDevice,
+        device: Arc<VkDevice>,
+        render_pass: &VkRenderPass,
+        capabilities: vk::SurfaceCapabilitiesKHR,
+        surface_format: vk::SurfaceFormatKHR,
+        present_mode: vk::PresentModeKHR,
+        extent: vk::Extent2D,
+    ) {
+        let _ = unsafe { self.device.device.device_wait_idle() };
 
-    //     *self = VkSwapchain::new(
-    //         window,
-    //         instance,
-    //         surface,
-    //         physical_device,
-    //         self.device.clone(),
-    //     )
-    //     .unwrap();
-    // }
+        let swapchain = VkSwapchain::new(
+            instance,
+            surface,
+            physical_device,
+            device,
+            render_pass,
+            capabilities,
+            surface_format,
+            present_mode,
+            extent,
+        ).unwrap();
+
+        *self = swapchain;
+    }
 
     pub fn destroy(&mut self) {
         unsafe {

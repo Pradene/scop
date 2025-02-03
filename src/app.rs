@@ -51,9 +51,9 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::Resized(_) => {
-                // if let Some(context) = &mut self.context {
-                //     context.recreate_swapchain(&self.window.as_ref().unwrap());
-                // }
+                if let Some(context) = &mut self.context {
+                    context.resize(&self.window.as_ref().unwrap()).unwrap();
+                }
             }
 
             _ => (),
