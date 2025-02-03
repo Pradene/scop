@@ -1,5 +1,3 @@
-use rand::Rng;
-
 use crate::vulkan::Vertex;
 use lineal::Vector;
 
@@ -28,7 +26,7 @@ pub struct FaceVertex {
 
 pub type Face = Vec<FaceVertex>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Group {
     pub name: String,
     pub faces: Vec<Face>,
@@ -47,11 +45,12 @@ impl Group {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Object {
     pub groups: Vec<Group>,
     pub vertices: Vec<Vector<f32, 3>>,
     pub normals: Vec<Vector<f32, 3>>,
+    pub center: Vector<f32, 3>,
 }
 
 impl Object {
@@ -60,6 +59,7 @@ impl Object {
             groups: Vec::new(),
             vertices: Vec::new(),
             normals: Vec::new(),
+            center: Vector::new([0., 0., 0.])
         };
     }
 
@@ -214,6 +214,9 @@ impl Object {
             object.groups.push(group);
         }
 
+        object.center = object.compute_center();
+        println!("center: {}", object.center);
+
         return Ok(object);
     }
 
@@ -236,25 +239,37 @@ impl Object {
         return triangles;
     }
 
-    pub fn get_vertices_and_indices(&self) -> (Vec<Vertex>, Vec<u32>) {
-        let mut rng = rand::rng();
+    pub fn compute_center(&self) -> Vector<f32, 3> {
+        let mut sum = Vector::from([0.0, 0.0, 0.0]);
+        
+        if self.vertices.is_empty() {
+            return sum;
+        }
 
+        for vertex in &self.vertices {
+            sum += *vertex;
+        }
+
+        return sum / (self.vertices.len() as f32);
+    }
+
+    pub fn get_vertices_and_indices(&self) -> (Vec<Vertex>, Vec<u32>) {
         let vertices = self
             .vertices
-            .iter()
+            .chunks(3) // Each face has 3 vertices (for triangles)
             .enumerate()
-            .map(|(i, v)| Vertex {
-                position: v.clone(),
-                normal: if i < self.normals.len() {
-                    self.normals[i].clone()
-                } else {
-                    Vector::new([1., 0., 0.])
-                },
-                color: Vector::new([
-                    rng.random_range(0.0..1.0),
-                    rng.random_range(0.0..1.0),
-                    rng.random_range(0.0..1.0),
-                ]),
+            .flat_map(|(face_index, face_vertices)| {
+                let color_value = if face_index % 2 == 0 { 1.0 } else { 0.0 };
+            
+                face_vertices.iter().map(move |v| Vertex {
+                    position: v.clone(),
+                    normal: Vector::new([1., 0., 0.]), // Example normal
+                    color: Vector::new([
+                        color_value, 
+                        color_value,
+                        color_value
+                    ]),
+                })
             })
             .collect::<Vec<Vertex>>();
 

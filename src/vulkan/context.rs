@@ -41,6 +41,8 @@ pub struct VkContext {
     pub surface: VkSurface,
     pub instance: VkInstance,
     pub frame: u32,
+
+    pub object: Object,
 }
 
 impl VkContext {
@@ -150,6 +152,8 @@ impl VkContext {
             descriptor_pool,
             descriptor_sets,
             sync,
+
+            object: object.clone(),
         });
     }
 
@@ -335,13 +339,15 @@ impl VkContext {
                 .as_secs_f32()
         };
 
-        let model = lineal::rotate(
-            Matrix::identity(),
+        let matrix: Matrix<f32, 4, 4> = Matrix::identity();
+        let translated = matrix.translate(self.object.center * -1.);
+        let rotated = translated.rotate(
             lineal::radian(90. * elapsed_time),
             Vector::new([0., 1., 0.]),
         );
+        let model = rotated;
         let view = lineal::look_at(
-            Vector::new([0., 0., 20.]),
+            Vector::new([0., 0., 10.]),
             Vector::new([0., 0., 0.]),
             Vector::new([0., 1., 0.]),
         );
