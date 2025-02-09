@@ -20,6 +20,27 @@ impl VkQueue {
 
         return VkQueue { device, queue };
     }
+
+    pub fn submit(&self, command_buffer: &vk::CommandBuffer, wait_semaphores: &[vk::Semaphore], signal_semaphores: &[vk::Semaphore], wait_stages: &[vk::PipelineStageFlags], fence: &vk::Fence) {
+
+        let submit_info = vk::SubmitInfo {
+            s_type: vk::StructureType::SUBMIT_INFO,
+            wait_semaphore_count: wait_semaphores.len() as u32,
+            p_wait_semaphores: wait_semaphores.as_ptr(),
+            p_wait_dst_stage_mask: wait_stages.as_ptr(),
+            command_buffer_count: 1,
+            p_command_buffers: command_buffer,
+            signal_semaphore_count: signal_semaphores.len() as u32,
+            p_signal_semaphores: signal_semaphores.as_ptr(),
+            ..Default::default()
+        };
+
+        unsafe {
+            self.device.device
+                .queue_submit(self.queue, &[submit_info], *fence)
+                .unwrap()
+        };
+    }
 }
 
 impl Drop for VkQueue {

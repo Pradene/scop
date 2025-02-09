@@ -2,19 +2,21 @@ use ash::vk;
 use std::sync::Arc;
 use std::ffi::c_void;
 
-use lineal::{Vector, Matrix};
+use lineal::{radian, Matrix, Vector};
 
 use crate::objects::Object;
 use crate::vulkan::{query_swapchain_support, MAX_FRAMES_IN_FLIGHT, UniformBufferObject};
 use crate::vulkan::{
     VkBuffer, VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkPipeline, VkQueue,
-    VkRenderPass, VkSurface, VkSwapchain, VkSyncObjects
+    VkRenderPass, VkSurface, VkSwapchain, Camera, VkFence, VkSemaphore
 };
 
 use winit::window::Window;
 
 pub struct VkContext {
-    pub sync: VkSyncObjects,
+    pub image_available_semaphores: Vec<VkSemaphore>,
+    pub render_finished_semaphores: Vec<VkSemaphore>,
+    pub in_flight_fences: Vec<VkFence>,
     
     pub descriptor_pool: vk::DescriptorPool,
     pub descriptor_sets: Vec<vk::DescriptorSet>,
@@ -43,6 +45,8 @@ pub struct VkContext {
     pub frame: u32,
 
     pub object: Object,
+
+    pub camera: Camera,
 }
 
 impl VkContext {
@@ -130,7 +134,28 @@ impl VkContext {
             &uniform_buffers,
         )?;
 
-        let sync = VkSyncObjects::new(device.clone())?;
+        let mut image_available_semaphores: Vec<VkSemaphore> = Vec::new();
+        let mut render_finished_semaphores: Vec<VkSemaphore> = Vec::new();
+        let mut in_flight_fences: Vec<VkFence> = Vec::new();
+
+        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+            let image_semaphore = VkSemaphore::new(device.clone())?;
+            let render_semaphore = VkSemaphore::new(device.clone())?;
+            let fence = VkFence::new(device.clone())?;
+
+            image_available_semaphores.push(image_semaphore);
+            render_finished_semaphores.push(render_semaphore);
+            in_flight_fences.push(fence);
+        }
+
+        let camera = Camera::new(
+            Vector::new([0., 0., 200.]),
+            Vector::new([0., 0., 0.]),
+            radian(45.),
+            swapchain.extent.width as f32 / swapchain.extent.height as f32,
+            0.1,
+            500.
+        );
 
         return Ok(VkContext {
             instance,
@@ -151,9 +176,13 @@ impl VkContext {
             uniform_buffers_mapped,
             descriptor_pool,
             descriptor_sets,
-            sync,
+
+            image_available_semaphores,
+            render_finished_semaphores,
+            in_flight_fences,
 
             object: object.clone(),
+            camera,
         });
     }
 
@@ -346,19 +375,9 @@ impl VkContext {
             Vector::new([0., 1., 0.]),
         );
         let model = rotated;
-        let view = lineal::look_at(
-            Vector::new([0., 0., 10.]),
-            Vector::new([0., 0., 0.]),
-            Vector::new([0., 1., 0.]),
-        );
-        let mut proj = lineal::projection(
-            lineal::radian(45.),
-            self.swapchain.extent.width as f32 / self.swapchain.extent.height as f32,
-            0.1,
-            50.,
-        );
 
-        proj[1][1] = proj[1][1] * -1.;
+        let view = self.camera.get_view_matrix();
+        let proj = self.camera.get_projection_matrix();
 
         let ubo = UniformBufferObject { model, view, proj };
 
@@ -373,7 +392,7 @@ impl VkContext {
     pub fn draw_frame(&mut self, window: &Window) {
         let _ = unsafe {
             self.device.device.wait_for_fences(
-                &[self.sync.in_flight_fences[self.frame as usize]],
+                &[self.in_flight_fences[self.frame as usize].fence],
                 true,
                 u64::MAX,
             )
@@ -383,7 +402,7 @@ impl VkContext {
             self.swapchain.loader.acquire_next_image(
                 self.swapchain.swapchain,
                 u64::MAX,
-                self.sync.image_available_semaphores[self.frame as usize],
+                self.image_available_semaphores[self.frame as usize].semaphore,
                 vk::Fence::null(),
             )
         };
@@ -410,7 +429,7 @@ impl VkContext {
         let _ = unsafe {
             self.device
                 .device
-                .reset_fences(&[self.sync.in_flight_fences[self.frame as usize]])
+                .reset_fences(&[self.in_flight_fences[self.frame as usize].fence])
         };
 
         let _ = unsafe {
@@ -422,47 +441,19 @@ impl VkContext {
 
         let _ = self.record_command_buffer(&self.command_pool.buffers[self.frame as usize], image_index);
 
-        let signal_semaphores = [self.sync.render_finished_semaphores[self.frame as usize]];
-        let wait_semaphores = [self.sync.image_available_semaphores[self.frame as usize]];
+        let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].semaphore];
+        let wait_semaphores = [self.image_available_semaphores[self.frame as usize].semaphore];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
-        let submit_info = vk::SubmitInfo {
-            s_type: vk::StructureType::SUBMIT_INFO,
-            wait_semaphore_count: wait_semaphores.len() as u32,
-            p_wait_semaphores: wait_semaphores.as_ptr(),
-            p_wait_dst_stage_mask: wait_stages.as_ptr(),
-            command_buffer_count: 1,
-            p_command_buffers: &self.command_pool.buffers[self.frame as usize],
-            signal_semaphore_count: signal_semaphores.len() as u32,
-            p_signal_semaphores: signal_semaphores.as_ptr(),
-            ..Default::default()
-        };
+        self.graphics_queue.submit(
+            &self.command_pool.buffers[self.frame as usize],
+            &wait_semaphores,
+            &signal_semaphores,
+            &wait_stages,
+            &self.in_flight_fences[self.frame as usize].fence
+        );
 
-        let _ = unsafe {
-            self.device.device.queue_submit(
-                self.graphics_queue.queue,
-                &[submit_info],
-                self.sync.in_flight_fences[self.frame as usize],
-            )
-        };
-
-        let present_info = vk::PresentInfoKHR {
-            s_type: vk::StructureType::PRESENT_INFO_KHR,
-            wait_semaphore_count: 1,
-            p_wait_semaphores: signal_semaphores.as_ptr(),
-            swapchain_count: 1,
-            p_swapchains: [self.swapchain.swapchain].as_ptr(),
-            p_image_indices: &image_index,
-            p_results: std::ptr::null_mut(),
-            ..Default::default()
-        };
-
-        let _ = unsafe {
-            self.swapchain
-                .loader
-                .queue_present(self.present_queue.queue, &present_info)
-                .unwrap()
-        };
+        self.swapchain.present_queue(&self.present_queue, &signal_semaphores, image_index);
 
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
     }

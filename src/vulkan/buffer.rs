@@ -192,6 +192,7 @@ impl VkBuffer {
                 .queue_submit(*queue, &[submit_info], vk::Fence::null())
                 .unwrap()
         };
+
         unsafe { device.device.queue_wait_idle(*queue).unwrap() };
         unsafe {
             device

@@ -1,4 +1,3 @@
-use ash::khr::swapchain;
 use ash::{khr, vk};
 use std::sync::Arc;
 
@@ -202,7 +201,7 @@ impl VkSwapchain {
     ) {
         let present_info = vk::PresentInfoKHR {
             s_type: vk::StructureType::PRESENT_INFO_KHR,
-            wait_semaphore_count: 1,
+            wait_semaphore_count: signal_semaphores.len() as u32,
             p_wait_semaphores: signal_semaphores.as_ptr(),
             swapchain_count: 1,
             p_swapchains: [self.swapchain].as_ptr(),

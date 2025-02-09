@@ -14,6 +14,7 @@ mod swapchain;
 mod sync;
 mod utils;
 mod vertex;
+mod camera;
 
 pub use buffer::*;
 pub use command::*;
@@ -31,6 +32,7 @@ pub use swapchain::*;
 pub use sync::*;
 pub use utils::*;
 pub use vertex::*;
+pub use camera::*;
 
 use ash::vk;
 use std::ffi::CStr;
