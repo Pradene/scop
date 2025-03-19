@@ -55,9 +55,9 @@ impl VkInstance {
     }
 
     fn create_instance(entry: &Entry, window: &Window) -> Result<Instance, String> {
-        // if VALIDATION_LAYERS_ENABLED && !Self::check_validation_layer_support(entry) {
-        //     return Err("Validation layers not supported".to_string());
-        // }
+        if VALIDATION_LAYERS_ENABLED && !Self::check_validation_layer_support(entry) {
+            return Err("Validation layers not supported".to_string());
+        }
 
         // Set up Vulkan application information
         let application_info = vk::ApplicationInfo {

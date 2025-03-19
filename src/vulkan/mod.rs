@@ -39,8 +39,8 @@ use std::ffi::CStr;
 
 pub const MAX_FRAMES_IN_FLIGHT: u32 = 2;
 
-pub const VALIDATION_LAYERS_ENABLED: bool = cfg!(debug_assertions);
-// pub const VALIDATION_LAYERS_ENABLED: bool = false;
+// pub const VALIDATION_LAYERS_ENABLED: bool = cfg!(debug_assertions);
+pub const VALIDATION_LAYERS_ENABLED: bool = false;
 pub const VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
 pub const DEVICE_EXTENSIONS: [&CStr; 1] = [vk::KHR_SWAPCHAIN_NAME];

@@ -23,21 +23,19 @@ impl Camera {
         };
     }
 
-    pub fn get_projection_matrix(&self) -> Matrix<f32, 4, 4> {
-        let mut proj = lineal::projection(
+    pub fn projection_matrix(&self) -> Matrix<f32, 4, 4> {
+        let projection = Matrix::projection(
             self.fov,
             self.ratio,
             self.near,
-            self.far,
+            self.far
         );
 
-        proj[1][1] *= -1.;
-
-        return proj;
+        return projection;
     }
 
-    pub fn get_view_matrix(&self) -> Matrix<f32, 4, 4> {
-        let view = lineal::look_at(
+    pub fn view_matrix(&self) -> Matrix<f32, 4, 4> {
+        let view = Matrix::look_at(
             self.position,
             self.direction,
             Vector::new([0., 1., 0.]),

@@ -149,8 +149,8 @@ impl VkContext {
         }
 
         let camera = Camera::new(
-            Vector::new([0., 0., 200.]),
-            Vector::new([0., 0., 0.]),
+            Vector::new([0., 0., -200.]),
+            Vector::new([0., 0., 1.]),
             radian(45.),
             swapchain.extent.width as f32 / swapchain.extent.height as f32,
             0.1,
@@ -319,7 +319,7 @@ impl VkContext {
         let mut uniform_buffers_memory = Vec::with_capacity(capacity);
         let mut uniform_buffers_mapped = Vec::with_capacity(capacity);
 
-        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+        for _ in 0..capacity {
             let usage = vk::BufferUsageFlags::UNIFORM_BUFFER;
             let properties =
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
@@ -368,16 +368,15 @@ impl VkContext {
                 .as_secs_f32()
         };
 
-        let matrix: Matrix<f32, 4, 4> = Matrix::identity();
-        let translated = matrix.translate(self.object.center * -1.);
-        let rotated = translated.rotate(
+        let translated = Matrix::identity().translate(self.object.center * -1.);
+        let rotated = Matrix::identity().rotate(
             lineal::radian(90. * elapsed_time),
             Vector::new([0., 1., 0.]),
         );
-        let model = rotated;
 
-        let view = self.camera.get_view_matrix();
-        let proj = self.camera.get_projection_matrix();
+        let model = rotated * translated;
+        let view = self.camera.view_matrix();
+        let proj = self.camera.projection_matrix();
 
         let ubo = UniformBufferObject { model, view, proj };
 
