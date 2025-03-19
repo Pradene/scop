@@ -23,20 +23,14 @@ impl VkFence {
                 .map_err(|e| format!("Failed to create fence: {}", e))?
         };
 
-        return Ok(VkFence {
-            device,
-            fence,
-        });
+        return Ok(VkFence { device, fence });
     }
 }
 
 impl Drop for VkFence {
     fn drop(&mut self) {
         unsafe {
-            self.device.device.destroy_fence(
-                self.fence,
-                None
-            );
+            self.device.device.destroy_fence(self.fence, None);
         }
     }
 }
@@ -60,20 +54,14 @@ impl VkSemaphore {
                 .map_err(|e| format!("Failed to create semaphore: {}", e))?
         };
 
-        return Ok(VkSemaphore {
-            device,
-            semaphore,
-        });
+        return Ok(VkSemaphore { device, semaphore });
     }
 }
 
 impl Drop for VkSemaphore {
     fn drop(&mut self) {
         unsafe {
-            self.device.device.destroy_semaphore(
-                self.semaphore,
-                None
-            );
+            self.device.device.destroy_semaphore(self.semaphore, None);
         }
     }
 }

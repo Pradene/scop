@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 pub struct VkBuffer {
     device: Arc<VkDevice>,
-    pub buffer: vk::Buffer,
+    pub inner: vk::Buffer,
     pub size: vk::DeviceSize,
     pub memory: vk::DeviceMemory,
 }
@@ -51,7 +51,7 @@ impl VkBuffer {
 
         // Create the target buffer
         let target_properties = vk::MemoryPropertyFlags::DEVICE_LOCAL;
-        let (buffer, memory) = Self::create_buffer(
+        let (inner, memory) = Self::create_buffer(
             instance,
             physical_device,
             &device,
@@ -66,7 +66,7 @@ impl VkBuffer {
             &command,
             &queue.queue,
             &staging_buffer,
-            &buffer,
+            &inner,
             &size,
         );
 
@@ -78,7 +78,7 @@ impl VkBuffer {
 
         Ok(VkBuffer {
             device,
-            buffer,
+            inner,
             size: data.len() as u64,
             memory,
         })
@@ -230,7 +230,7 @@ impl Drop for VkBuffer {
     fn drop(&mut self) {
         unsafe {
             self.device.device.free_memory(self.memory, None);
-            self.device.device.destroy_buffer(self.buffer, None);
+            self.device.device.destroy_buffer(self.inner, None);
         }
     }
 }

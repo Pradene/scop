@@ -4,6 +4,7 @@ use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
     event_loop::ActiveEventLoop,
+    keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
 
@@ -53,6 +54,17 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(_) => {
                 if let Some(context) = &mut self.context {
                     context.resize(&self.window.as_ref().unwrap()).unwrap();
+                }
+            }
+
+            WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
+                match event.physical_key {
+                    PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
+                    _ => {}
                 }
             }
 

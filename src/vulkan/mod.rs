@@ -1,6 +1,8 @@
 mod buffer;
+mod camera;
 mod command;
 mod context;
+mod descriptor;
 mod device;
 mod image;
 mod instance;
@@ -14,11 +16,12 @@ mod swapchain;
 mod sync;
 mod utils;
 mod vertex;
-mod camera;
 
 pub use buffer::*;
+pub use camera::*;
 pub use command::*;
 pub use context::*;
+pub use descriptor::*;
 pub use device::*;
 pub use image::*;
 pub use instance::*;
@@ -32,7 +35,6 @@ pub use swapchain::*;
 pub use sync::*;
 pub use utils::*;
 pub use vertex::*;
-pub use camera::*;
 
 use ash::vk;
 use std::ffi::CStr;

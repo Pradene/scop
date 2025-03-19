@@ -21,8 +21,14 @@ impl VkQueue {
         return VkQueue { device, queue };
     }
 
-    pub fn submit(&self, command_buffer: &vk::CommandBuffer, wait_semaphores: &[vk::Semaphore], signal_semaphores: &[vk::Semaphore], wait_stages: &[vk::PipelineStageFlags], fence: &vk::Fence) {
-
+    pub fn submit(
+        &self,
+        command_buffer: &vk::CommandBuffer,
+        wait_semaphores: &[vk::Semaphore],
+        signal_semaphores: &[vk::Semaphore],
+        wait_stages: &[vk::PipelineStageFlags],
+        fence: &vk::Fence,
+    ) {
         let submit_info = vk::SubmitInfo {
             s_type: vk::StructureType::SUBMIT_INFO,
             wait_semaphore_count: wait_semaphores.len() as u32,
@@ -36,7 +42,8 @@ impl VkQueue {
         };
 
         unsafe {
-            self.device.device
+            self.device
+                .device
                 .queue_submit(self.queue, &[submit_info], *fence)
                 .unwrap()
         };

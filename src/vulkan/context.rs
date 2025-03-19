@@ -1,14 +1,17 @@
 use ash::vk;
-use std::sync::Arc;
 use std::ffi::c_void;
+use std::sync::Arc;
 
 use lineal::{radian, Matrix, Vector};
 
 use crate::objects::Object;
-use crate::vulkan::{query_swapchain_support, MAX_FRAMES_IN_FLIGHT, UniformBufferObject};
+use crate::vulkan::query_swapchain_support;
+use crate::vulkan::UniformBufferObject;
+use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
 use crate::vulkan::{
-    VkBuffer, VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkPipeline, VkQueue,
-    VkRenderPass, VkSurface, VkSwapchain, Camera, VkFence, VkSemaphore
+    Camera, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet, VkDescriptorSetLayout,
+    VkDevice, VkFence, VkInstance, VkPhysicalDevice, VkPipeline, VkQueue, VkRenderPass,
+    VkSemaphore, VkSurface, VkSwapchain,
 };
 
 use winit::window::Window;
@@ -17,27 +20,27 @@ pub struct VkContext {
     pub image_available_semaphores: Vec<VkSemaphore>,
     pub render_finished_semaphores: Vec<VkSemaphore>,
     pub in_flight_fences: Vec<VkFence>,
-    
-    pub descriptor_pool: vk::DescriptorPool,
-    pub descriptor_sets: Vec<vk::DescriptorSet>,
 
+    pub descriptor_pool: VkDescriptorPool,
+    pub descriptor_sets: Vec<VkDescriptorSet>,
+    pub descriptor_set_layout: VkDescriptorSetLayout,
 
     pub uniform_buffers: Vec<vk::Buffer>,
     pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
     pub uniform_buffers_mapped: Vec<*mut std::ffi::c_void>,
-    
+
     pub vertex_buffer: VkBuffer,
     pub index_buffer: VkBuffer,
-    
+
     pub command_pool: VkCommandPool,
     pub render_pass: VkRenderPass,
     pub pipeline: VkPipeline,
-    
+
     pub swapchain: VkSwapchain,
-    
+
     pub present_queue: VkQueue,
     pub graphics_queue: VkQueue,
-    
+
     pub device: Arc<VkDevice>,
     pub physical_device: VkPhysicalDevice,
     pub surface: VkSurface,
@@ -95,7 +98,8 @@ impl VkContext {
             extent,
         )?;
 
-        let pipeline = VkPipeline::new(device.clone(), &render_pass)?;
+        let descriptor_set_layout = VkDescriptorSetLayout::new(device.clone())?;
+        let pipeline = VkPipeline::new(device.clone(), &render_pass, &descriptor_set_layout)?;
 
         let command_pool = VkCommandPool::new(&physical_device, device.clone())?;
 
@@ -126,13 +130,9 @@ impl VkContext {
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
             VkContext::create_uniform_buffers(&instance, &physical_device, &device)?;
 
-        let descriptor_pool = VkContext::create_descriptor_pool(&device)?;
-        let descriptor_sets = VkContext::create_descriptor_set(
-            &device,
-            &descriptor_pool,
-            &pipeline.descriptor_set_layout,
-            &uniform_buffers,
-        )?;
+        let descriptor_pool = VkDescriptorPool::new(device.clone())?;
+        let descriptor_sets =
+            descriptor_pool.create_sets(&descriptor_set_layout, &uniform_buffers)?;
 
         let mut image_available_semaphores: Vec<VkSemaphore> = Vec::new();
         let mut render_finished_semaphores: Vec<VkSemaphore> = Vec::new();
@@ -154,7 +154,7 @@ impl VkContext {
             radian(45.),
             swapchain.extent.width as f32 / swapchain.extent.height as f32,
             0.1,
-            500.
+            500.,
         );
 
         return Ok(VkContext {
@@ -176,6 +176,7 @@ impl VkContext {
             uniform_buffers_mapped,
             descriptor_pool,
             descriptor_sets,
+            descriptor_set_layout,
 
             image_available_semaphores,
             render_finished_semaphores,
@@ -231,80 +232,6 @@ impl VkContext {
 
             return extent;
         }
-    }
-
-    fn create_descriptor_pool(device: &VkDevice) -> Result<vk::DescriptorPool, String> {
-        let pool_size = vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: MAX_FRAMES_IN_FLIGHT,
-        };
-
-        let create_info = vk::DescriptorPoolCreateInfo {
-            s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
-            pool_size_count: 1,
-            p_pool_sizes: &pool_size,
-            max_sets: MAX_FRAMES_IN_FLIGHT,
-            ..Default::default()
-        };
-
-        let descriptor_pool = unsafe {
-            device
-                .device
-                .create_descriptor_pool(&create_info, None)
-                .map_err(|e| format!("Failed to create descriptor pool: {}", e))?
-        };
-        return Ok(descriptor_pool);
-    }
-
-    fn create_descriptor_set(
-        device: &VkDevice,
-        descriptor_pool: &vk::DescriptorPool,
-        descriptor_set_layout: &vk::DescriptorSetLayout,
-        uniform_buffers: &Vec<vk::Buffer>,
-    ) -> Result<Vec<vk::DescriptorSet>, String> {
-        let layouts = vec![*descriptor_set_layout; MAX_FRAMES_IN_FLIGHT as usize];
-
-        let allocate_info = vk::DescriptorSetAllocateInfo {
-            s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
-            descriptor_pool: *descriptor_pool,
-            descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
-            p_set_layouts: layouts.as_ptr(),
-            ..Default::default()
-        };
-
-        let descriptor_sets = unsafe {
-            device
-                .device
-                .allocate_descriptor_sets(&allocate_info)
-                .map_err(|e| format!("Failed to allocate descriptor sets: {}", e))?
-        };
-
-        for index in 0..MAX_FRAMES_IN_FLIGHT {
-            let buffer_info = vk::DescriptorBufferInfo {
-                buffer: uniform_buffers[index as usize],
-                offset: 0,
-                range: std::mem::size_of::<UniformBufferObject>() as u64,
-            };
-
-            let descriptor_write = vk::WriteDescriptorSet {
-                s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
-                dst_set: descriptor_sets[index as usize],
-                dst_binding: 0,
-                dst_array_element: 0,
-                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: 1,
-                p_buffer_info: &buffer_info,
-                ..Default::default()
-            };
-
-            unsafe {
-                device
-                    .device
-                    .update_descriptor_sets(&[descriptor_write], &[])
-            };
-        }
-
-        return Ok(descriptor_sets);
     }
 
     fn create_uniform_buffers(
@@ -438,7 +365,8 @@ impl VkContext {
             )
         };
 
-        let _ = self.record_command_buffer(&self.command_pool.buffers[self.frame as usize], image_index);
+        let _ = self
+            .record_command_buffer(&self.command_pool.buffers[self.frame as usize], image_index);
 
         let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].semaphore];
         let wait_semaphores = [self.image_available_semaphores[self.frame as usize].semaphore];
@@ -449,10 +377,11 @@ impl VkContext {
             &wait_semaphores,
             &signal_semaphores,
             &wait_stages,
-            &self.in_flight_fences[self.frame as usize].fence
+            &self.in_flight_fences[self.frame as usize].fence,
         );
 
-        self.swapchain.present_queue(&self.present_queue, &signal_semaphores, image_index);
+        self.swapchain
+            .present_queue(&self.present_queue, &signal_semaphores, image_index);
 
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
@@ -525,19 +454,19 @@ impl VkContext {
             self.device.device.cmd_bind_pipeline(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline.pipeline,
+                self.pipeline.inner,
             );
 
             self.device.device.cmd_bind_vertex_buffers(
                 *command_buffer,
                 0,
-                &[self.vertex_buffer.buffer],
+                &[self.vertex_buffer.inner],
                 &[0],
             );
 
             self.device.device.cmd_bind_index_buffer(
                 *command_buffer,
-                self.index_buffer.buffer,
+                self.index_buffer.inner,
                 0,
                 vk::IndexType::UINT32,
             );
@@ -553,9 +482,9 @@ impl VkContext {
             self.device.device.cmd_bind_descriptor_sets(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline.pipeline_layout,
+                self.pipeline.layout,
                 0,
-                &[self.descriptor_sets[self.frame as usize]],
+                &[self.descriptor_sets[self.frame as usize].inner],
                 &[],
             );
 
@@ -580,10 +509,8 @@ impl VkContext {
     }
 
     pub fn resize(&mut self, window: &Window) -> Result<(), String> {
-        let _ = unsafe {
-            self.device.device.device_wait_idle()
-        };
-        
+        let _ = unsafe { self.device.device.device_wait_idle() };
+
         let support_details = query_swapchain_support(
             &self.physical_device.physical_device,
             &self.surface.loader,
@@ -604,7 +531,7 @@ impl VkContext {
             capabilities,
             surface_format,
             present_mode,
-            extent
+            extent,
         );
 
         return Ok(());
@@ -615,13 +542,15 @@ impl Drop for VkContext {
     fn drop(&mut self) {
         unsafe {
             let _ = self.device.device.device_wait_idle();
-            
-            for i  in 0..self.uniform_buffers.len() {
-                self.device.device.destroy_buffer(self.uniform_buffers[i], None);
-                self.device.device.free_memory(self.uniform_buffers_memory[i], None);
-            }
 
-            self.device.device.destroy_descriptor_pool(self.descriptor_pool, None);
+            for i in 0..self.uniform_buffers.len() {
+                self.device
+                    .device
+                    .destroy_buffer(self.uniform_buffers[i], None);
+                self.device
+                    .device
+                    .free_memory(self.uniform_buffers_memory[i], None);
+            }
         }
     }
 }

@@ -241,7 +241,8 @@ impl VkSwapchain {
             surface_format,
             present_mode,
             extent,
-        ).unwrap();
+        )
+        .unwrap();
 
         *self = swapchain;
     }

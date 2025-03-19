@@ -59,7 +59,7 @@ impl Object {
             groups: Vec::new(),
             vertices: Vec::new(),
             normals: Vec::new(),
-            center: Vector::new([0., 0., 0.])
+            center: Vector::new([0., 0., 0.]),
         };
     }
 
@@ -229,11 +229,7 @@ impl Object {
         }
 
         for i in 0..face.len() - 1 {
-            triangles.push(vec![
-                face[0].clone(),
-                face[i].clone(),
-                face[i + 1].clone()
-            ])
+            triangles.push(vec![face[0].clone(), face[i].clone(), face[i + 1].clone()])
         }
 
         return triangles;
@@ -241,7 +237,7 @@ impl Object {
 
     pub fn compute_center(&self) -> Vector<f32, 3> {
         let mut sum = Vector::from([0.0, 0.0, 0.0]);
-        
+
         if self.vertices.is_empty() {
             return sum;
         }
@@ -260,15 +256,11 @@ impl Object {
             .enumerate()
             .flat_map(|(face_index, face_vertices)| {
                 let color_value = if face_index % 2 == 0 { 1.0 } else { 0.0 };
-            
+
                 face_vertices.iter().map(move |v| Vertex {
                     position: v.clone(),
                     normal: Vector::new([1., 0., 0.]), // Example normal
-                    color: Vector::new([
-                        color_value, 
-                        color_value,
-                        color_value
-                    ]),
+                    color: Vector::new([color_value, color_value, color_value]),
                 })
             })
             .collect::<Vec<Vertex>>();

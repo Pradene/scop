@@ -1,4 +1,4 @@
-use super::{Vertex, VkDevice, VkRenderPass, VkShaderModule};
+use super::{Vertex, VkDescriptorSetLayout, VkDevice, VkRenderPass, VkShaderModule};
 
 use ash::vk;
 use std::ffi::CString;
@@ -6,13 +6,16 @@ use std::sync::Arc;
 
 pub struct VkPipeline {
     device: Arc<VkDevice>,
-    pub pipeline: vk::Pipeline,
-    pub descriptor_set_layout: vk::DescriptorSetLayout,
-    pub pipeline_layout: vk::PipelineLayout,
+    pub inner: vk::Pipeline,
+    pub layout: vk::PipelineLayout,
 }
 
 impl VkPipeline {
-    pub fn new(device: Arc<VkDevice>, render_pass: &VkRenderPass) -> Result<VkPipeline, String> {
+    pub fn new(
+        device: Arc<VkDevice>,
+        render_pass: &VkRenderPass,
+        descriptor_set_layout: &VkDescriptorSetLayout,
+    ) -> Result<VkPipeline, String> {
         let frag_shader_module = VkShaderModule::new(device.clone(), "shaders/shader.frag.spv")?;
         let vert_shader_module = VkShaderModule::new(device.clone(), "shaders/shader.vert.spv")?;
 
@@ -66,7 +69,7 @@ impl VkPipeline {
             rasterizer_discard_enable: vk::FALSE,
             polygon_mode: vk::PolygonMode::FILL,
             line_width: 1.,
-            cull_mode: vk::CullModeFlags::NONE,
+            cull_mode: vk::CullModeFlags::BACK,
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
             depth_bias_enable: vk::FALSE,
             depth_bias_constant_factor: 0.,
@@ -128,18 +131,16 @@ impl VkPipeline {
             ..Default::default()
         };
 
-        let descriptor_set_layout = VkPipeline::create_descriptor_set_layout(&device)?;
-
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
             set_layout_count: 1,
-            p_set_layouts: &descriptor_set_layout,
+            p_set_layouts: &descriptor_set_layout.inner,
             push_constant_range_count: 0,
             p_push_constant_ranges: std::ptr::null(),
             ..Default::default()
         };
 
-        let pipeline_layout = unsafe {
+        let layout = unsafe {
             device
                 .device
                 .create_pipeline_layout(&pipeline_layout_create_info, None)
@@ -158,7 +159,7 @@ impl VkPipeline {
             p_color_blend_state: &color_blending,
             p_dynamic_state: &dynamic_state,
             p_depth_stencil_state: &depth_stencil,
-            layout: pipeline_layout,
+            layout: layout,
             render_pass: render_pass.render_pass,
             subpass: 0,
             ..Default::default()
@@ -166,7 +167,7 @@ impl VkPipeline {
 
         let pipeline_create_infos = [pipeline_create_info];
         let pipeline_cache = vk::PipelineCache::null();
-        let pipeline = unsafe {
+        let inner = unsafe {
             device
                 .device
                 .create_graphics_pipelines(pipeline_cache, &pipeline_create_infos, None)
@@ -176,37 +177,9 @@ impl VkPipeline {
 
         return Ok(VkPipeline {
             device,
-            pipeline,
-            descriptor_set_layout,
-            pipeline_layout,
+            inner,
+            layout,
         });
-    }
-
-    fn create_descriptor_set_layout(device: &VkDevice) -> Result<vk::DescriptorSetLayout, String> {
-        let ubo_layout_binding = vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::VERTEX,
-            p_immutable_samplers: std::ptr::null(),
-            ..Default::default()
-        };
-
-        let create_info = vk::DescriptorSetLayoutCreateInfo {
-            s_type: vk::StructureType::DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            binding_count: 1,
-            p_bindings: &ubo_layout_binding,
-            ..Default::default()
-        };
-
-        let descriptor_set_layout = unsafe {
-            device
-                .device
-                .create_descriptor_set_layout(&create_info, None)
-                .map_err(|e| format!("Failed to create descriptor set layout: {}", e))?
-        };
-
-        return Ok(descriptor_set_layout);
     }
 }
 
@@ -215,11 +188,8 @@ impl Drop for VkPipeline {
         unsafe {
             self.device
                 .device
-                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
-            self.device
-                .device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device.device.destroy_pipeline(self.pipeline, None);
+                .destroy_pipeline_layout(self.layout, None);
+            self.device.device.destroy_pipeline(self.inner, None);
         }
     }
 }
