@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 pub struct VkShaderModule {
     device: Arc<VkDevice>,
-    pub shader: vk::ShaderModule,
+    pub inner: vk::ShaderModule,
 }
 
 impl VkShaderModule {
@@ -19,14 +19,14 @@ impl VkShaderModule {
             ..Default::default()
         };
 
-        let shader = unsafe {
+        let inner = unsafe {
             device
-                .device
+                .inner
                 .create_shader_module(&create_info, None)
                 .map_err(|e| format!("Failed to create shader module: {}", e))?
         };
 
-        return Ok(VkShaderModule { device, shader });
+        return Ok(VkShaderModule { device, inner });
     }
 
     fn read_spv_file(path: &str) -> Result<Vec<u32>, String> {
@@ -43,7 +43,7 @@ impl VkShaderModule {
 impl Drop for VkShaderModule {
     fn drop(&mut self) {
         unsafe {
-            self.device.device.destroy_shader_module(self.shader, None);
+            self.device.inner.destroy_shader_module(self.inner, None);
         }
     }
 }

@@ -23,7 +23,7 @@ impl VkPipeline {
         let vert_shader_create_info = vk::PipelineShaderStageCreateInfo {
             s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage: vk::ShaderStageFlags::VERTEX,
-            module: vert_shader_module.shader,
+            module: vert_shader_module.inner,
             p_name: entrypoint.as_ptr(),
             ..Default::default()
         };
@@ -31,7 +31,7 @@ impl VkPipeline {
         let frag_shader_create_info = vk::PipelineShaderStageCreateInfo {
             s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
             stage: vk::ShaderStageFlags::FRAGMENT,
-            module: frag_shader_module.shader,
+            module: frag_shader_module.inner,
             p_name: entrypoint.as_ptr(),
             ..Default::default()
         };
@@ -142,7 +142,7 @@ impl VkPipeline {
 
         let layout = unsafe {
             device
-                .device
+                .inner
                 .create_pipeline_layout(&pipeline_layout_create_info, None)
                 .map_err(|e| format!("Failed to create pipeline layout: {}", e))?
         };
@@ -159,8 +159,8 @@ impl VkPipeline {
             p_color_blend_state: &color_blending,
             p_dynamic_state: &dynamic_state,
             p_depth_stencil_state: &depth_stencil,
-            layout: layout,
-            render_pass: render_pass.render_pass,
+            layout,
+            render_pass: render_pass.inner,
             subpass: 0,
             ..Default::default()
         };
@@ -169,7 +169,7 @@ impl VkPipeline {
         let pipeline_cache = vk::PipelineCache::null();
         let inner = unsafe {
             device
-                .device
+                .inner
                 .create_graphics_pipelines(pipeline_cache, &pipeline_create_infos, None)
                 .map_err(|_| format!("Failed to create graphics pipeline"))?
                 .remove(0)
@@ -186,10 +186,8 @@ impl VkPipeline {
 impl Drop for VkPipeline {
     fn drop(&mut self) {
         unsafe {
-            self.device
-                .device
-                .destroy_pipeline_layout(self.layout, None);
-            self.device.device.destroy_pipeline(self.inner, None);
+            self.device.inner.destroy_pipeline_layout(self.layout, None);
+            self.device.inner.destroy_pipeline(self.inner, None);
         }
     }
 }

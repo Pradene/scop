@@ -215,7 +215,6 @@ impl Object {
         }
 
         object.center = object.compute_center();
-        println!("center: {}", object.center);
 
         return Ok(object);
     }

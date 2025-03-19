@@ -61,12 +61,10 @@ impl ApplicationHandler for App {
                 device_id,
                 event,
                 is_synthetic,
-            } => {
-                match event.physical_key {
-                    PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
-                    _ => {}
-                }
-            }
+            } => match event.physical_key {
+                PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
+                _ => {}
+            },
 
             _ => (),
         }

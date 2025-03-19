@@ -11,14 +11,14 @@ pub struct QueueFamiliesIndices {
 
 pub struct VkQueue {
     device: Arc<VkDevice>,
-    pub queue: vk::Queue,
+    pub inner: vk::Queue,
 }
 
 impl VkQueue {
     pub fn new(device: Arc<VkDevice>, queue_family_index: u32) -> VkQueue {
-        let queue = unsafe { device.device.get_device_queue(queue_family_index, 0) };
+        let inner = unsafe { device.inner.get_device_queue(queue_family_index, 0) };
 
-        return VkQueue { device, queue };
+        return VkQueue { device, inner };
     }
 
     pub fn submit(
@@ -43,8 +43,8 @@ impl VkQueue {
 
         unsafe {
             self.device
-                .device
-                .queue_submit(self.queue, &[submit_info], *fence)
+                .inner
+                .queue_submit(self.inner, &[submit_info], *fence)
                 .unwrap()
         };
     }
@@ -52,6 +52,6 @@ impl VkQueue {
 
 impl Drop for VkQueue {
     fn drop(&mut self) {
-        unsafe { self.device.device.queue_wait_idle(self.queue).unwrap() };
+        unsafe { self.device.inner.queue_wait_idle(self.inner).unwrap() };
     }
 }

@@ -16,7 +16,7 @@ impl VkBuffer {
         physical_device: &VkPhysicalDevice,
         device: Arc<VkDevice>,
         queue: &VkQueue,
-        command: &VkCommandPool,
+        command_pool: &VkCommandPool,
         data: &[f32],
         usage: vk::BufferUsageFlags,
     ) -> Result<VkBuffer, String> {
@@ -39,14 +39,14 @@ impl VkBuffer {
         // Map memory and copy data
         let data_ptr = unsafe {
             device
-                .device
+                .inner
                 .map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())
                 .unwrap()
         };
 
         unsafe {
             std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr as *mut f32, data.len());
-            device.device.unmap_memory(staging_buffer_memory);
+            device.inner.unmap_memory(staging_buffer_memory);
         }
 
         // Create the target buffer
@@ -63,8 +63,8 @@ impl VkBuffer {
         // Copy data from the staging buffer to the target buffer
         Self::copy_buffer(
             &device,
-            &command,
-            &queue.queue,
+            &command_pool,
+            &queue.inner,
             &staging_buffer,
             &inner,
             &size,
@@ -72,8 +72,8 @@ impl VkBuffer {
 
         // Cleanup staging buffer
         unsafe {
-            device.device.destroy_buffer(staging_buffer, None);
-            device.device.free_memory(staging_buffer_memory, None);
+            device.inner.destroy_buffer(staging_buffer, None);
+            device.inner.free_memory(staging_buffer_memory, None);
         }
 
         Ok(VkBuffer {
@@ -100,9 +100,9 @@ impl VkBuffer {
             ..Default::default()
         };
 
-        let buffer = unsafe { device.device.create_buffer(&create_info, None).unwrap() };
+        let buffer = unsafe { device.inner.create_buffer(&create_info, None).unwrap() };
 
-        let memory_requirements = unsafe { device.device.get_buffer_memory_requirements(buffer) };
+        let memory_requirements = unsafe { device.inner.get_buffer_memory_requirements(buffer) };
 
         let allocate_info = vk::MemoryAllocateInfo {
             s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,
@@ -118,10 +118,10 @@ impl VkBuffer {
             ..Default::default()
         };
 
-        let buffer_memory = unsafe { device.device.allocate_memory(&allocate_info, None).unwrap() };
+        let buffer_memory = unsafe { device.inner.allocate_memory(&allocate_info, None).unwrap() };
         let _ = unsafe {
             device
-                .device
+                .inner
                 .bind_buffer_memory(buffer, buffer_memory, 0)
                 .unwrap()
         };
@@ -131,7 +131,7 @@ impl VkBuffer {
 
     fn copy_buffer(
         device: &VkDevice,
-        command: &VkCommandPool,
+        command_pool: &VkCommandPool,
         queue: &vk::Queue,
         src: &vk::Buffer,
         dst: &vk::Buffer,
@@ -140,14 +140,14 @@ impl VkBuffer {
         let allocate_info = vk::CommandBufferAllocateInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
             level: vk::CommandBufferLevel::PRIMARY,
-            command_pool: command.pool,
+            command_pool: command_pool.inner,
             command_buffer_count: 1,
             ..Default::default()
         };
 
         let command_buffer = unsafe {
             device
-                .device
+                .inner
                 .allocate_command_buffers(&allocate_info)
                 .unwrap()
                 .remove(0)
@@ -161,7 +161,7 @@ impl VkBuffer {
 
         let _ = unsafe {
             device
-                .device
+                .inner
                 .begin_command_buffer(command_buffer, &begin_info)
                 .unwrap()
         };
@@ -174,10 +174,10 @@ impl VkBuffer {
 
         unsafe {
             device
-                .device
+                .inner
                 .cmd_copy_buffer(command_buffer, *src, *dst, &[copy_region])
         };
-        unsafe { device.device.end_command_buffer(command_buffer).unwrap() };
+        unsafe { device.inner.end_command_buffer(command_buffer).unwrap() };
 
         let submit_info = vk::SubmitInfo {
             s_type: vk::StructureType::SUBMIT_INFO,
@@ -188,16 +188,16 @@ impl VkBuffer {
 
         unsafe {
             device
-                .device
+                .inner
                 .queue_submit(*queue, &[submit_info], vk::Fence::null())
                 .unwrap()
         };
 
-        unsafe { device.device.queue_wait_idle(*queue).unwrap() };
+        unsafe { device.inner.queue_wait_idle(*queue).unwrap() };
         unsafe {
             device
-                .device
-                .free_command_buffers(command.pool, &[command_buffer]);
+                .inner
+                .free_command_buffers(command_pool.inner, &[command_buffer]);
         };
     }
 
@@ -209,8 +209,8 @@ impl VkBuffer {
     ) -> Result<u32, String> {
         let memory_properties = unsafe {
             instance
-                .instance
-                .get_physical_device_memory_properties(physical_device.physical_device)
+                .inner
+                .get_physical_device_memory_properties(physical_device.inner)
         };
 
         for index in 0..memory_properties.memory_type_count {
@@ -229,8 +229,8 @@ impl VkBuffer {
 impl Drop for VkBuffer {
     fn drop(&mut self) {
         unsafe {
-            self.device.device.free_memory(self.memory, None);
-            self.device.device.destroy_buffer(self.inner, None);
+            self.device.inner.free_memory(self.memory, None);
+            self.device.inner.destroy_buffer(self.inner, None);
         }
     }
 }

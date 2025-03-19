@@ -6,7 +6,7 @@ use super::{VkDevice, VkInstance, VkPhysicalDevice};
 
 pub struct VkRenderPass {
     device: Arc<VkDevice>,
-    pub render_pass: vk::RenderPass,
+    pub inner: vk::RenderPass,
 }
 
 impl VkRenderPass {
@@ -83,26 +83,21 @@ impl VkRenderPass {
             ..Default::default()
         };
 
-        let render_pass = unsafe {
+        let inner = unsafe {
             device
-                .device
+                .inner
                 .create_render_pass(&render_pass_create_info, None)
                 .map_err(|e| format!("Failed to create render pass: {}", e))?
         };
 
-        return Ok(VkRenderPass {
-            device,
-            render_pass,
-        });
+        return Ok(VkRenderPass { device, inner });
     }
 }
 
 impl Drop for VkRenderPass {
     fn drop(&mut self) {
         unsafe {
-            self.device
-                .device
-                .destroy_render_pass(self.render_pass, None);
+            self.device.inner.destroy_render_pass(self.inner, None);
         }
     }
 }

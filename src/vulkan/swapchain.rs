@@ -7,7 +7,7 @@ use super::{VkDevice, VkInstance, VkPhysicalDevice, VkQueue, VkRenderPass, VkSur
 pub struct VkSwapchain {
     device: Arc<VkDevice>,
     pub loader: khr::swapchain::Device,
-    pub swapchain: vk::SwapchainKHR,
+    pub inner: vk::SwapchainKHR,
     pub images: Vec<vk::Image>,
     pub image_format: vk::Format,
     pub extent: vk::Extent2D,
@@ -41,7 +41,7 @@ impl VkSwapchain {
         let image_format = surface_format.format;
         let mut create_info = vk::SwapchainCreateInfoKHR {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
-            surface: surface.surface,
+            surface: surface.inner,
             min_image_count: image_count,
             image_format,
             image_color_space: surface_format.color_space,
@@ -71,8 +71,8 @@ impl VkSwapchain {
             create_info.p_queue_family_indices = std::ptr::null();
         }
 
-        let loader = khr::swapchain::Device::new(&instance.instance, &device.device);
-        let swapchain = unsafe {
+        let loader = khr::swapchain::Device::new(&instance.inner, &device.inner);
+        let inner = unsafe {
             loader
                 .create_swapchain(&create_info, None)
                 .map_err(|e| format!("Failed to create swapchain: {}", e))?
@@ -80,7 +80,7 @@ impl VkSwapchain {
 
         let images = unsafe {
             loader
-                .get_swapchain_images(swapchain)
+                .get_swapchain_images(inner)
                 .map_err(|e| format!("Failed to get swapchain images: {}", e))?
         };
 
@@ -109,7 +109,7 @@ impl VkSwapchain {
 
             let framebuffer_create_info = vk::FramebufferCreateInfo {
                 s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
-                render_pass: render_pass.render_pass,
+                render_pass: render_pass.inner,
                 attachment_count: attachments.len() as u32,
                 p_attachments: attachments.as_ptr(),
                 width: extent.width,
@@ -120,7 +120,7 @@ impl VkSwapchain {
 
             let framebuffer = unsafe {
                 device
-                    .device
+                    .inner
                     .create_framebuffer(&framebuffer_create_info, None)
                     .map_err(|e| format!("Failed to create framebuffer: {}", e))?
             };
@@ -131,7 +131,7 @@ impl VkSwapchain {
         return Ok(VkSwapchain {
             device,
             loader,
-            swapchain,
+            inner,
             images,
             image_format,
             extent,
@@ -183,7 +183,7 @@ impl VkSwapchain {
 
             let framebuffer = unsafe {
                 device
-                    .device
+                    .inner
                     .create_framebuffer(&framebuffer_create_info, None)
                     .map_err(|e| format!("Failed to create framebuffer: {}", e))?
             };
@@ -204,7 +204,7 @@ impl VkSwapchain {
             wait_semaphore_count: signal_semaphores.len() as u32,
             p_wait_semaphores: signal_semaphores.as_ptr(),
             swapchain_count: 1,
-            p_swapchains: [self.swapchain].as_ptr(),
+            p_swapchains: [self.inner].as_ptr(),
             p_image_indices: &image_index,
             p_results: std::ptr::null_mut(),
             ..Default::default()
@@ -212,7 +212,7 @@ impl VkSwapchain {
 
         let _ = unsafe {
             self.loader
-                .queue_present(queue.queue, &present_info)
+                .queue_present(queue.inner, &present_info)
                 .unwrap()
         };
     }
@@ -229,7 +229,7 @@ impl VkSwapchain {
         present_mode: vk::PresentModeKHR,
         extent: vk::Extent2D,
     ) {
-        let _ = unsafe { self.device.device.device_wait_idle() };
+        let _ = unsafe { self.device.inner.device_wait_idle() };
 
         let swapchain = VkSwapchain::new(
             instance,
@@ -251,25 +251,23 @@ impl VkSwapchain {
         unsafe {
             for index in 0..self.framebuffers.len() {
                 self.device
-                    .device
+                    .inner
                     .destroy_framebuffer(self.framebuffers[index], None);
             }
 
             for index in 0..self.image_views.len() {
                 self.device
-                    .device
+                    .inner
                     .destroy_image_view(self.image_views[index], None);
             }
 
             self.device
-                .device
+                .inner
                 .destroy_image_view(self.depth_image_view, None);
-            self.device.device.destroy_image(self.depth_image, None);
-            self.device
-                .device
-                .free_memory(self.depth_image_memory, None);
+            self.device.inner.destroy_image(self.depth_image, None);
+            self.device.inner.free_memory(self.depth_image_memory, None);
 
-            self.loader.destroy_swapchain(self.swapchain, None);
+            self.loader.destroy_swapchain(self.inner, None);
         }
     }
 }

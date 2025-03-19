@@ -36,12 +36,12 @@ pub fn create_image(
 
     let image = unsafe {
         device
-            .device
+            .inner
             .create_image(&create_info, None)
             .map_err(|e| format!("Failed to create image: {}", e))?
     };
 
-    let memory_requirements = unsafe { device.device.get_image_memory_requirements(image) };
+    let memory_requirements = unsafe { device.inner.get_image_memory_requirements(image) };
     let memory_type = VkBuffer::find_memory_type(
         instance,
         physical_device,
@@ -58,14 +58,14 @@ pub fn create_image(
 
     let memory = unsafe {
         device
-            .device
+            .inner
             .allocate_memory(&allocate_info, None)
             .map_err(|e| format!("Failed to allocate image memory: {}", e))?
     };
 
     let _ = unsafe {
         device
-            .device
+            .inner
             .bind_image_memory(image, memory, 0)
             .map_err(|e| format!("Failed to bind memory to image: {}", e))
     };
@@ -96,7 +96,7 @@ pub fn create_image_view(
 
     let image_view = unsafe {
         device
-            .device
+            .inner
             .create_image_view(&create_info, None)
             .map_err(|e| format!("Failed to create image view: {}", e))?
     };

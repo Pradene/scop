@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 pub struct VkFence {
     device: Arc<VkDevice>,
-    pub fence: vk::Fence,
+    pub inner: vk::Fence,
 }
 
 impl VkFence {
@@ -16,28 +16,28 @@ impl VkFence {
             ..Default::default()
         };
 
-        let fence = unsafe {
+        let inner = unsafe {
             device
-                .device
+                .inner
                 .create_fence(&fence_info, None)
                 .map_err(|e| format!("Failed to create fence: {}", e))?
         };
 
-        return Ok(VkFence { device, fence });
+        return Ok(VkFence { device, inner });
     }
 }
 
 impl Drop for VkFence {
     fn drop(&mut self) {
         unsafe {
-            self.device.device.destroy_fence(self.fence, None);
+            self.device.inner.destroy_fence(self.inner, None);
         }
     }
 }
 
 pub struct VkSemaphore {
     device: Arc<VkDevice>,
-    pub semaphore: vk::Semaphore,
+    pub inner: vk::Semaphore,
 }
 
 impl VkSemaphore {
@@ -47,21 +47,21 @@ impl VkSemaphore {
             ..Default::default()
         };
 
-        let semaphore = unsafe {
+        let inner = unsafe {
             device
-                .device
+                .inner
                 .create_semaphore(&semaphore_info, None)
                 .map_err(|e| format!("Failed to create semaphore: {}", e))?
         };
 
-        return Ok(VkSemaphore { device, semaphore });
+        return Ok(VkSemaphore { device, inner });
     }
 }
 
 impl Drop for VkSemaphore {
     fn drop(&mut self) {
         unsafe {
-            self.device.device.destroy_semaphore(self.semaphore, None);
+            self.device.inner.destroy_semaphore(self.inner, None);
         }
     }
 }

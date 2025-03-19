@@ -28,7 +28,7 @@ impl VkDescriptorPool {
 
         let inner = unsafe {
             device
-                .device
+                .inner
                 .create_descriptor_pool(&create_info, None)
                 .map_err(|e| format!("Failed to create descriptor pool: {}", e))?
         };
@@ -53,7 +53,7 @@ impl VkDescriptorPool {
 
         let descriptor_sets = unsafe {
             self.device
-                .device
+                .inner
                 .allocate_descriptor_sets(&allocate_info)
                 .map_err(|e| format!("Failed to allocate descriptor sets: {}", e))?
         };
@@ -78,7 +78,7 @@ impl VkDescriptorPool {
 
             unsafe {
                 self.device
-                    .device
+                    .inner
                     .update_descriptor_sets(&[descriptor_write], &[])
             };
         }
@@ -98,7 +98,7 @@ impl VkDescriptorPool {
 impl Drop for VkDescriptorPool {
     fn drop(&mut self) {
         unsafe {
-            self.device.device.destroy_descriptor_pool(self.inner, None);
+            self.device.inner.destroy_descriptor_pool(self.inner, None);
         }
     }
 }
@@ -133,7 +133,7 @@ impl VkDescriptorSetLayout {
 
         let inner = unsafe {
             device
-                .device
+                .inner
                 .create_descriptor_set_layout(&create_info, None)
                 .map_err(|e| format!("Failed to create descriptor set layout: {}", e))?
         };
@@ -146,7 +146,7 @@ impl Drop for VkDescriptorSetLayout {
     fn drop(&mut self) {
         unsafe {
             self.device
-                .device
+                .inner
                 .destroy_descriptor_set_layout(self.inner, None);
         }
     }

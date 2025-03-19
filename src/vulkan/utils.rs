@@ -12,8 +12,8 @@ fn find_supported_format(
     for format in candidates {
         let props = unsafe {
             instance
-                .instance
-                .get_physical_device_format_properties(physical_device.physical_device, *format)
+                .inner
+                .get_physical_device_format_properties(physical_device.inner, *format)
         };
 
         if (tiling == vk::ImageTiling::LINEAR

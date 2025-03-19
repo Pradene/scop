@@ -4,7 +4,7 @@ use crate::vulkan::{VkInstance, VkPhysicalDevice};
 use ash::{vk, Device};
 
 pub struct VkDevice {
-    pub device: Device,
+    pub inner: Device,
 }
 
 impl VkDevice {
@@ -51,21 +51,21 @@ impl VkDevice {
             ..Default::default()
         };
 
-        let device = unsafe {
+        let inner = unsafe {
             instance
-                .instance
-                .create_device(physical_device.physical_device, &create_info, None)
+                .inner
+                .create_device(physical_device.inner, &create_info, None)
                 .map_err(|e| format!("Failed to create logical device: {}", e))?
         };
 
-        return Ok(VkDevice { device });
+        return Ok(VkDevice { inner });
     }
 }
 
 impl Drop for VkDevice {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_device(None);
+            self.inner.destroy_device(None);
         }
     }
 }

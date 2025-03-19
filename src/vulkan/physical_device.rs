@@ -7,22 +7,21 @@ use crate::vulkan::DEVICE_EXTENSIONS;
 use crate::vulkan::{QueueFamiliesIndices, SwapChainSupportDetails, VkInstance, VkSurface};
 
 pub struct VkPhysicalDevice {
-    pub physical_device: vk::PhysicalDevice,
+    pub inner: vk::PhysicalDevice,
     pub queue_families: QueueFamiliesIndices,
     pub swapchain_support: SwapChainSupportDetails,
 }
 
 impl VkPhysicalDevice {
     pub fn new(instance: &VkInstance, surface: &VkSurface) -> Result<VkPhysicalDevice, String> {
-        let (physical_device, queue_families, swapchain_support) =
-            VkPhysicalDevice::choose_physical_device(
-                &instance.instance,
-                &surface.loader,
-                &surface.surface,
-            )?;
+        let (inner, queue_families, swapchain_support) = VkPhysicalDevice::choose_physical_device(
+            &instance.inner,
+            &surface.loader,
+            &surface.inner,
+        )?;
 
         return Ok(VkPhysicalDevice {
-            physical_device,
+            inner,
             queue_families,
             swapchain_support,
         });
@@ -59,28 +58,19 @@ impl VkPhysicalDevice {
             ),
         > = BTreeMap::new();
 
-        for physical_device in physical_devices {
+        for inner in physical_devices {
             let (score, queue_families) =
-                Self::rate_device(instance, surface_loader, surface, &physical_device)?;
+                Self::rate_device(instance, surface_loader, surface, &inner)?;
 
             let swapchain_support;
-            match VkPhysicalDevice::query_swapchain_support(
-                &physical_device,
-                surface_loader,
-                surface,
-            ) {
+            match VkPhysicalDevice::query_swapchain_support(&inner, surface_loader, surface) {
                 Ok(value) => swapchain_support = value,
                 Err(e) => return Err(format!("Swapchain not supported: {}", e)),
             }
 
             if score > 0 {
-                if Self::is_device_suitable(
-                    instance,
-                    &physical_device,
-                    &queue_families,
-                    &swapchain_support,
-                ) {
-                    candidates.insert(score, (physical_device, queue_families, swapchain_support));
+                if Self::is_device_suitable(instance, &inner, &queue_families, &swapchain_support) {
+                    candidates.insert(score, (inner, queue_families, swapchain_support));
                 }
             }
         }
@@ -97,12 +87,11 @@ impl VkPhysicalDevice {
         instance: &Instance,
         surface_loader: &khr::surface::Instance,
         surface: &vk::SurfaceKHR,
-        physical_device: &vk::PhysicalDevice,
+        inner: &vk::PhysicalDevice,
     ) -> Result<(i32, QueueFamiliesIndices), String> {
-        let properties = unsafe { instance.get_physical_device_properties(*physical_device) };
-        let features = unsafe { instance.get_physical_device_features(*physical_device) };
-        let queue_families =
-            Self::find_queue_families(instance, &physical_device, surface_loader, surface);
+        let properties = unsafe { instance.get_physical_device_properties(*inner) };
+        let features = unsafe { instance.get_physical_device_features(*inner) };
+        let queue_families = Self::find_queue_families(instance, &inner, surface_loader, surface);
 
         let mut score = 0;
 
@@ -121,13 +110,13 @@ impl VkPhysicalDevice {
 
     fn is_device_suitable(
         instance: &Instance,
-        physical_device: &vk::PhysicalDevice,
+        inner: &vk::PhysicalDevice,
         queue_families: &QueueFamiliesIndices,
         swapchain_support: &SwapChainSupportDetails,
     ) -> bool {
         let device_extensions = unsafe {
             instance
-                .enumerate_device_extension_properties(*physical_device)
+                .enumerate_device_extension_properties(*inner)
                 .map_err(|e| format!("{}", e))
                 .unwrap_or_default()
         };
@@ -150,7 +139,7 @@ impl VkPhysicalDevice {
 
     fn find_queue_families(
         instance: &Instance,
-        physical_device: &vk::PhysicalDevice,
+        inner: &vk::PhysicalDevice,
         surface_loader: &khr::surface::Instance,
         surface: &vk::SurfaceKHR,
     ) -> QueueFamiliesIndices {
@@ -158,7 +147,7 @@ impl VkPhysicalDevice {
         let mut present_family = None;
 
         let queue_families =
-            unsafe { instance.get_physical_device_queue_family_properties(*physical_device) };
+            unsafe { instance.get_physical_device_queue_family_properties(*inner) };
 
         for (index, queue_family) in queue_families.iter().enumerate() {
             let index = index as u32;
@@ -170,7 +159,7 @@ impl VkPhysicalDevice {
 
             let present_support = unsafe {
                 surface_loader
-                    .get_physical_device_surface_support(*physical_device, index, *surface)
+                    .get_physical_device_surface_support(*inner, index, *surface)
                     .unwrap()
             };
 
@@ -190,25 +179,25 @@ impl VkPhysicalDevice {
     }
 
     pub fn query_swapchain_support(
-        physical_device: &vk::PhysicalDevice,
+        inner: &vk::PhysicalDevice,
         surface_loader: &khr::surface::Instance,
         surface: &vk::SurfaceKHR,
     ) -> Result<SwapChainSupportDetails, String> {
         let capabilities = unsafe {
             surface_loader
-                .get_physical_device_surface_capabilities(*physical_device, *surface)
+                .get_physical_device_surface_capabilities(*inner, *surface)
                 .map_err(|e| format!("Failed to get surface capabilities: {}", e))?
         };
 
         let formats = unsafe {
             surface_loader
-                .get_physical_device_surface_formats(*physical_device, *surface)
+                .get_physical_device_surface_formats(*inner, *surface)
                 .map_err(|e| format!("Failed to get surface formats: {}", e))?
         };
 
         let present_modes = unsafe {
             surface_loader
-                .get_physical_device_surface_present_modes(*physical_device, *surface)
+                .get_physical_device_surface_present_modes(*inner, *surface)
                 .map_err(|e| format!("Failed to get surface present modes: {}", e))?
         };
 

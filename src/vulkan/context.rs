@@ -9,9 +9,9 @@ use crate::vulkan::query_swapchain_support;
 use crate::vulkan::UniformBufferObject;
 use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
 use crate::vulkan::{
-    Camera, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet, VkDescriptorSetLayout,
-    VkDevice, VkFence, VkInstance, VkPhysicalDevice, VkPipeline, VkQueue, VkRenderPass,
-    VkSemaphore, VkSurface, VkSwapchain, Vertex
+    Camera, Vertex, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet,
+    VkDescriptorSetLayout, VkDevice, VkFence, VkInstance, VkPhysicalDevice, VkPipeline, VkQueue,
+    VkRenderPass, VkSemaphore, VkSurface, VkSwapchain,
 };
 
 use winit::window::Window;
@@ -68,11 +68,8 @@ impl VkContext {
         let queue_family_index = physical_device.queue_families.present_family.unwrap();
         let present_queue = VkQueue::new(device.clone(), queue_family_index);
 
-        let support_details = query_swapchain_support(
-            &physical_device.physical_device,
-            &surface.loader,
-            &surface.surface,
-        )?;
+        let support_details =
+            query_swapchain_support(&physical_device.inner, &surface.loader, &surface.inner)?;
 
         let capabilities = support_details.capabilities;
         let surface_format = VkContext::choose_surface_format(&support_details.formats);
@@ -108,7 +105,7 @@ impl VkContext {
         let vertices: &[f32] = unsafe {
             std::slice::from_raw_parts(
                 vertices.as_ptr() as *const f32,
-                vertices.len() * std::mem::size_of::<Vertex>() / std::mem::size_of::<f32>()
+                vertices.len() * std::mem::size_of::<Vertex>() / std::mem::size_of::<f32>(),
             )
         };
 
@@ -126,7 +123,7 @@ impl VkContext {
         let indices: &[f32] = unsafe {
             std::slice::from_raw_parts(
                 indices.as_ptr() as *const f32,
-                indices.len() * std::mem::size_of::<u32>() / std::mem::size_of::<f32>()
+                indices.len() * std::mem::size_of::<u32>() / std::mem::size_of::<f32>(),
             )
         };
 
@@ -276,7 +273,7 @@ impl VkContext {
 
             let buffer_mapped = unsafe {
                 device
-                    .device
+                    .inner
                     .map_memory(buffer_memory, 0, buffer_size, vk::MemoryMapFlags::empty())
                     .map_err(|e| format!("Failed to map memory: {}", e))?
             };
@@ -331,8 +328,8 @@ impl VkContext {
 
     pub fn draw_frame(&mut self, window: &Window) {
         let _ = unsafe {
-            self.device.device.wait_for_fences(
-                &[self.in_flight_fences[self.frame as usize].fence],
+            self.device.inner.wait_for_fences(
+                &[self.in_flight_fences[self.frame as usize].inner],
                 true,
                 u64::MAX,
             )
@@ -340,9 +337,9 @@ impl VkContext {
 
         let acquire_result = unsafe {
             self.swapchain.loader.acquire_next_image(
-                self.swapchain.swapchain,
+                self.swapchain.inner,
                 u64::MAX,
-                self.image_available_semaphores[self.frame as usize].semaphore,
+                self.image_available_semaphores[self.frame as usize].inner,
                 vk::Fence::null(),
             )
         };
@@ -368,30 +365,32 @@ impl VkContext {
 
         let _ = unsafe {
             self.device
-                .device
-                .reset_fences(&[self.in_flight_fences[self.frame as usize].fence])
+                .inner
+                .reset_fences(&[self.in_flight_fences[self.frame as usize].inner])
         };
 
         let _ = unsafe {
-            self.device.device.reset_command_buffer(
-                self.command_pool.buffers[self.frame as usize],
+            self.device.inner.reset_command_buffer(
+                self.command_pool.buffers[self.frame as usize].inner,
                 vk::CommandBufferResetFlags::empty(),
             )
         };
 
-        let _ = self
-            .record_command_buffer(&self.command_pool.buffers[self.frame as usize], image_index);
+        let _ = self.record_command_buffer(
+            &self.command_pool.buffers[self.frame as usize].inner,
+            image_index,
+        );
 
-        let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].semaphore];
-        let wait_semaphores = [self.image_available_semaphores[self.frame as usize].semaphore];
+        let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].inner];
+        let wait_semaphores = [self.image_available_semaphores[self.frame as usize].inner];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
         self.graphics_queue.submit(
-            &self.command_pool.buffers[self.frame as usize],
+            &self.command_pool.buffers[self.frame as usize].inner,
             &wait_semaphores,
             &signal_semaphores,
             &wait_stages,
-            &self.in_flight_fences[self.frame as usize].fence,
+            &self.in_flight_fences[self.frame as usize].inner,
         );
 
         self.swapchain
@@ -428,7 +427,7 @@ impl VkContext {
 
         let render_pass_info = vk::RenderPassBeginInfo {
             s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
-            render_pass: self.render_pass.render_pass,
+            render_pass: self.render_pass.inner,
             framebuffer: self.swapchain.framebuffers[image_index as usize],
             render_area: vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
@@ -455,30 +454,30 @@ impl VkContext {
 
         unsafe {
             self.device
-                .device
+                .inner
                 .begin_command_buffer(*command_buffer, &begin_info)
                 .map_err(|e| format!("Failed to start command buffer: {}", e))?;
 
-            self.device.device.cmd_begin_render_pass(
+            self.device.inner.cmd_begin_render_pass(
                 *command_buffer,
                 &render_pass_info,
                 vk::SubpassContents::INLINE,
             );
 
-            self.device.device.cmd_bind_pipeline(
+            self.device.inner.cmd_bind_pipeline(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline.inner,
             );
 
-            self.device.device.cmd_bind_vertex_buffers(
+            self.device.inner.cmd_bind_vertex_buffers(
                 *command_buffer,
                 0,
                 &[self.vertex_buffer.inner],
                 &[0],
             );
 
-            self.device.device.cmd_bind_index_buffer(
+            self.device.inner.cmd_bind_index_buffer(
                 *command_buffer,
                 self.index_buffer.inner,
                 0,
@@ -486,14 +485,14 @@ impl VkContext {
             );
 
             self.device
-                .device
+                .inner
                 .cmd_set_viewport(*command_buffer, 0, &[viewport]);
 
             self.device
-                .device
+                .inner
                 .cmd_set_scissor(*command_buffer, 0, &[scissor]);
 
-            self.device.device.cmd_bind_descriptor_sets(
+            self.device.inner.cmd_bind_descriptor_sets(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline.layout,
@@ -502,7 +501,7 @@ impl VkContext {
                 &[],
             );
 
-            self.device.device.cmd_draw_indexed(
+            self.device.inner.cmd_draw_indexed(
                 *command_buffer,
                 self.index_buffer.size as u32,
                 1,
@@ -511,10 +510,10 @@ impl VkContext {
                 0,
             );
 
-            self.device.device.cmd_end_render_pass(*command_buffer);
+            self.device.inner.cmd_end_render_pass(*command_buffer);
 
             self.device
-                .device
+                .inner
                 .end_command_buffer(*command_buffer)
                 .map_err(|e| format!("Failed to end command buffer: {}", e))?
         };
@@ -523,12 +522,12 @@ impl VkContext {
     }
 
     pub fn resize(&mut self, window: &Window) -> Result<(), String> {
-        let _ = unsafe { self.device.device.device_wait_idle() };
+        let _ = unsafe { self.device.inner.device_wait_idle() };
 
         let support_details = query_swapchain_support(
-            &self.physical_device.physical_device,
+            &self.physical_device.inner,
             &self.surface.loader,
-            &self.surface.surface,
+            &self.surface.inner,
         )?;
 
         let capabilities = support_details.capabilities;
@@ -555,14 +554,14 @@ impl VkContext {
 impl Drop for VkContext {
     fn drop(&mut self) {
         unsafe {
-            let _ = self.device.device.device_wait_idle();
+            let _ = self.device.inner.device_wait_idle();
 
             for i in 0..self.uniform_buffers.len() {
                 self.device
-                    .device
+                    .inner
                     .destroy_buffer(self.uniform_buffers[i], None);
                 self.device
-                    .device
+                    .inner
                     .free_memory(self.uniform_buffers_memory[i], None);
             }
         }
