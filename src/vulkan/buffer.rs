@@ -11,7 +11,7 @@ pub struct VkBuffer {
 }
 
 impl VkBuffer {
-    pub fn new<f32>(
+    pub fn new(
         instance: &VkInstance,
         physical_device: &VkPhysicalDevice,
         device: Arc<VkDevice>,

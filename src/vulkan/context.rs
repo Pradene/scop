@@ -11,7 +11,7 @@ use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
 use crate::vulkan::{
     Camera, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet, VkDescriptorSetLayout,
     VkDevice, VkFence, VkInstance, VkPhysicalDevice, VkPipeline, VkQueue, VkRenderPass,
-    VkSemaphore, VkSurface, VkSwapchain,
+    VkSemaphore, VkSurface, VkSwapchain, Vertex
 };
 
 use winit::window::Window;
@@ -105,6 +105,13 @@ impl VkContext {
 
         let (vertices, indices) = object.get_vertices_and_indices();
 
+        let vertices: &[f32] = unsafe {
+            std::slice::from_raw_parts(
+                vertices.as_ptr() as *const f32,
+                vertices.len() * std::mem::size_of::<Vertex>() / std::mem::size_of::<f32>()
+            )
+        };
+
         let vertex_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER;
         let vertex_buffer = VkBuffer::new(
             &instance,
@@ -115,6 +122,13 @@ impl VkContext {
             &vertices,
             vertex_usage,
         )?;
+
+        let indices: &[f32] = unsafe {
+            std::slice::from_raw_parts(
+                indices.as_ptr() as *const f32,
+                indices.len() * std::mem::size_of::<u32>() / std::mem::size_of::<f32>()
+            )
+        };
 
         let index_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER;
         let index_buffer = VkBuffer::new(
