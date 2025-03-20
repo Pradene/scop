@@ -86,7 +86,7 @@ impl VkDescriptorPool {
         let sets = descriptor_sets
             .into_iter()
             .map(|inner| VkDescriptorSet {
-                device: self.device.clone(),
+                _device: self.device.clone(),
                 inner,
             })
             .collect::<Vec<_>>();
@@ -104,7 +104,7 @@ impl Drop for VkDescriptorPool {
 }
 
 pub struct VkDescriptorSet {
-    device: Arc<VkDevice>,
+    _device: Arc<VkDevice>,
     pub inner: vk::DescriptorSet,
 }
 

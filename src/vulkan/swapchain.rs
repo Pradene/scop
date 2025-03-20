@@ -199,12 +199,14 @@ impl VkSwapchain {
         signal_semaphores: &[vk::Semaphore],
         image_index: u32,
     ) {
+        let swapchains = [self.inner];
+
         let present_info = vk::PresentInfoKHR {
             s_type: vk::StructureType::PRESENT_INFO_KHR,
             wait_semaphore_count: signal_semaphores.len() as u32,
             p_wait_semaphores: signal_semaphores.as_ptr(),
             swapchain_count: 1,
-            p_swapchains: [self.inner].as_ptr(),
+            p_swapchains: swapchains.as_ptr(),
             p_image_indices: &image_index,
             p_results: std::ptr::null_mut(),
             ..Default::default()

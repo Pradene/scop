@@ -68,7 +68,7 @@ impl VkCommandPool {
         let command_buffer = command_buffer
             .into_iter()
             .map(|inner| VkCommandBuffer {
-                device: device.clone(),
+                _device: device.clone(),
                 inner,
             })
             .collect();
@@ -92,6 +92,6 @@ impl Drop for VkCommandPool {
 }
 
 pub struct VkCommandBuffer {
-    device: Arc<VkDevice>,
+    _device: Arc<VkDevice>,
     pub inner: vk::CommandBuffer,
 }

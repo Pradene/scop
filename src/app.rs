@@ -58,9 +58,9 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::KeyboardInput {
-                device_id,
+                device_id: _,
                 event,
-                is_synthetic,
+                is_synthetic: _,
             } => match event.physical_key {
                 PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
                 _ => {}

@@ -1,7 +1,10 @@
-use crate::vulkan::Vertex;
-use lineal::Vector;
+use std::collections::HashMap;
 
+use crate::materials::Material;
 use crate::objects::lexer::{Lexer, Token};
+use crate::vulkan::Vertex;
+
+use lineal::Vector;
 
 #[derive(Debug)]
 pub enum ObjError {
@@ -51,6 +54,7 @@ pub struct Object {
     pub vertices: Vec<Vector<f32, 3>>,
     pub normals: Vec<Vector<f32, 3>>,
     pub center: Vector<f32, 3>,
+    pub materials: HashMap<String, Material>,
 }
 
 impl Object {
@@ -60,6 +64,7 @@ impl Object {
             vertices: Vec::new(),
             normals: Vec::new(),
             center: Vector::new([0., 0., 0.]),
+            materials: HashMap::new(),
         };
     }
 
