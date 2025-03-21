@@ -1,7 +1,10 @@
 use std::collections::HashMap;
-use std::io::BufRead;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader};
 
 use lineal::Vector;
+
+const BUFFER_SIZE: usize = 16;
 
 #[derive(Debug, PartialEq)]
 pub enum MtlLine {
@@ -35,17 +38,17 @@ pub struct Material {
 }
 
 /// A parser for MTL files that reads from any type implementing BufRead.
-pub struct MaterialParser<R> {
-    reader: R,
+pub struct MaterialParser {
+    reader: BufReader<File>,
 }
 
-impl<R> MaterialParser<R>
-where
-    R: BufRead,
-{
+impl MaterialParser {
     /// Create a new MaterialParser.
-    pub fn new(reader: R) -> MaterialParser<R> {
-        MaterialParser { reader }
+    pub fn new(path: String) -> io::Result<Self> {
+        let file = File::open(path)?;
+        let reader = BufReader::with_capacity(BUFFER_SIZE, file);
+
+        Ok(MaterialParser { reader })
     }
 
     /// Parse the entire MTL file into a Material struct with proper grouping.
@@ -217,9 +220,7 @@ where
                     None
                 }
             }
-            "#" => {
-                Some(MtlLine::Comment(tokens[1..].join(" ")))
-            }
+            "#" => Some(MtlLine::Comment(tokens[1..].join(" "))),
             _ => None,
         }
     }
