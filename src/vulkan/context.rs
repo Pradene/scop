@@ -46,6 +46,7 @@ pub struct VkContext {
     pub surface: VkSurface,
     pub instance: VkInstance,
     pub frame: u32,
+    pub start: std::time::Instant,
 
     pub object: Object,
 
@@ -139,7 +140,12 @@ impl VkContext {
         )?;
 
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
-            VkContext::create_uniform_buffers(&instance, &physical_device, &device)?;
+            VkContext::create_uniform_buffers(
+                &instance,
+                &physical_device,
+                &device,
+                std::mem::size_of::<UniformBufferObject>() as u64,
+            )?;
 
         let descriptor_pool = VkDescriptorPool::new(device.clone())?;
         let descriptor_sets =
@@ -160,7 +166,7 @@ impl VkContext {
         }
 
         let camera = Camera::new(
-            Vector::new([0., 0., -200.]),
+            Vector::new([0., 0., -10.]),
             Vector::new([0., 0., 1.]),
             radian(45.),
             swapchain.extent.width as f32 / swapchain.extent.height as f32,
@@ -180,6 +186,7 @@ impl VkContext {
             pipeline,
             command_pool,
             frame: 0,
+            start: std::time::Instant::now(),
             vertex_buffer,
             index_buffer,
             uniform_buffers,
@@ -249,9 +256,8 @@ impl VkContext {
         instance: &VkInstance,
         physical_device: &VkPhysicalDevice,
         device: &VkDevice,
+        buffer_size: u64,
     ) -> Result<(Vec<vk::Buffer>, Vec<vk::DeviceMemory>, Vec<*mut c_void>), String> {
-        let buffer_size: vk::DeviceSize = std::mem::size_of::<UniformBufferObject>() as u64;
-
         let capacity = MAX_FRAMES_IN_FLIGHT as usize;
         let mut uniform_buffers = Vec::with_capacity(capacity);
         let mut uniform_buffers_memory = Vec::with_capacity(capacity);
@@ -291,20 +297,8 @@ impl VkContext {
     }
 
     fn update_uniform_buffer(&mut self, current_image: u32) {
-        static mut START_TIME: Option<std::time::Instant> = None;
-
-        unsafe {
-            if START_TIME.is_none() {
-                START_TIME = Some(std::time::Instant::now());
-            }
-        }
-
         let current_time = std::time::Instant::now();
-        let elapsed_time = unsafe {
-            current_time
-                .duration_since(START_TIME.unwrap())
-                .as_secs_f32()
-        };
+        let elapsed_time = current_time.duration_since(self.start).as_secs_f32();
 
         let translated = Matrix::identity().translate(self.object.center * -1.);
         let rotated = Matrix::identity().rotate(

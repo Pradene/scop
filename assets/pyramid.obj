@@ -5,7 +5,7 @@ v  0.5   0    0.5  # Vertex 1 (Base - front-right)
 v  -0.5  0    0.5  # Vertex 2 (Base - front-left)
 v  0.5   0   -0.5  # Vertex 3 (Base - back-right)
 v  -0.5  0   -0.5  # Vertex 4 (Base - back-left)
-v  0     1.6   0    # Vertex 5 (Apex)
+v  0     1.6    0  # Vertex 5 (Apex)
 
 # Corrected faces
 # Base (split into two triangles using diagonal 2-4)
