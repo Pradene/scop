@@ -1,5 +1,4 @@
 mod buffer;
-mod camera;
 mod command;
 mod context;
 mod descriptor;
@@ -18,7 +17,6 @@ mod utils;
 mod vertex;
 
 pub use buffer::*;
-pub use camera::*;
 pub use command::*;
 pub use context::*;
 pub use descriptor::*;

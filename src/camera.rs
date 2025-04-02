@@ -1,5 +1,6 @@
 use lineal::{Matrix, Vector};
 
+#[derive(Debug, Clone)]
 pub struct Camera {
     pub position: Vector<f32, 3>,
     pub direction: Vector<f32, 3>,

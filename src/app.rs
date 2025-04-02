@@ -1,28 +1,27 @@
-use crate::{objects::Object, vulkan::VkContext};
+use crate::{camera::Camera, objects::Object, vulkan::VkContext, WINDOW_HEIGHT, WINDOW_WIDTH};
 
 use winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    event_loop::ActiveEventLoop,
-    keyboard::{KeyCode, PhysicalKey},
-    window::{Window, WindowId},
+    application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::ActiveEventLoop, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowId}
 };
 
 pub struct App {
     window: Option<Window>,
     context: Option<VkContext>,
+    camera: Camera,
     object: Object,
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            let window_attributes = Window::default_attributes().with_title("Scop");
+            let window_attributes = Window::default_attributes()
+                .with_title("Scop")
+                .with_inner_size(PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT));
             let window = event_loop
                 .create_window(window_attributes)
                 .expect("Failed to create window");
 
-            match VkContext::new(&window, &self.object) {
+            match VkContext::new(&window, &self.camera, &self.object) {
                 Ok(context) => {
                     self.context = Some(context);
                     println!("Vulkan context initialized successfully.");
@@ -72,10 +71,11 @@ impl ApplicationHandler for App {
 }
 
 impl App {
-    pub fn new(object: Object) -> App {
+    pub fn new(camera: Camera, object: Object) -> App {
         return App {
             window: None,
             context: None,
+            camera,
             object,
         };
     }

@@ -2,14 +2,15 @@ use ash::vk;
 use std::ffi::c_void;
 use std::sync::Arc;
 
-use lineal::{radian, Matrix, Vector};
+use lineal::{Matrix, Vector};
 
+use crate::camera::Camera;
 use crate::objects::Object;
 use crate::vulkan::query_swapchain_support;
 use crate::vulkan::UniformBufferObject;
 use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
 use crate::vulkan::{
-    Camera, Vertex, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet,
+    Vertex, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet,
     VkDescriptorSetLayout, VkDevice, VkFence, VkInstance, VkPhysicalDevice, VkPipeline, VkQueue,
     VkRenderPass, VkSemaphore, VkSurface, VkSwapchain,
 };
@@ -54,7 +55,7 @@ pub struct VkContext {
 }
 
 impl VkContext {
-    pub fn new(window: &Window, object: &Object) -> Result<VkContext, String> {
+    pub fn new(window: &Window, camera: &Camera, object: &Object) -> Result<VkContext, String> {
         let instance = VkInstance::new(window)?;
 
         let surface = VkSurface::new(window, &instance)?;
@@ -165,15 +166,6 @@ impl VkContext {
             in_flight_fences.push(fence);
         }
 
-        let camera = Camera::new(
-            Vector::new([0., 0., -10.]),
-            Vector::new([0., 0., 1.]),
-            radian(45.),
-            swapchain.extent.width as f32 / swapchain.extent.height as f32,
-            0.1,
-            500.,
-        );
-
         return Ok(VkContext {
             instance,
             surface,
@@ -201,7 +193,7 @@ impl VkContext {
             in_flight_fences,
 
             object: object.clone(),
-            camera,
+            camera: camera.clone(),
         });
     }
 
