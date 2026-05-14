@@ -30,8 +30,8 @@ pub struct VkContext {
     pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
     pub uniform_buffers_mapped: Vec<*mut std::ffi::c_void>,
 
-    pub vertex_buffer: VkBuffer,
-    pub index_buffer: VkBuffer,
+    pub vertex_buffer: VkBuffer<Vertex>,
+    pub index_buffer: VkBuffer<u32>,
 
     pub command_pool: VkCommandPool,
     pub render_pass: VkRenderPass,
@@ -103,14 +103,7 @@ impl VkContext {
         let command_pool = VkCommandPool::new(&physical_device, device.clone())?;
 
         let (vertices, indices) = object.get_vertices_and_indices();
-
-        let vertices: &[f32] = unsafe {
-            std::slice::from_raw_parts(
-                vertices.as_ptr() as *const f32,
-                vertices.len() * std::mem::size_of::<Vertex>() / std::mem::size_of::<f32>(),
-            )
-        };
-
+        
         let vertex_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER;
         let vertex_buffer = VkBuffer::new(
             &instance,
@@ -121,13 +114,6 @@ impl VkContext {
             &vertices,
             vertex_usage,
         )?;
-
-        let indices: &[f32] = unsafe {
-            std::slice::from_raw_parts(
-                indices.as_ptr() as *const f32,
-                indices.len() * std::mem::size_of::<u32>() / std::mem::size_of::<f32>(),
-            )
-        };
 
         let index_usage = vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER;
         let index_buffer = VkBuffer::new(

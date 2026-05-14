@@ -2,32 +2,34 @@ use crate::vulkan::{VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkQue
 
 use ash::vk;
 use std::sync::Arc;
+use std::marker::PhantomData;
 
-pub struct VkBuffer {
+pub struct VkBuffer<T> {
     device: Arc<VkDevice>,
     pub inner: vk::Buffer,
     pub size: vk::DeviceSize,
     pub memory: vk::DeviceMemory,
+    _type: PhantomData<T>,
 }
 
-impl VkBuffer {
+impl<T: Copy> VkBuffer<T> {
     pub fn new(
         instance: &VkInstance,
         physical_device: &VkPhysicalDevice,
         device: Arc<VkDevice>,
         queue: &VkQueue,
         command_pool: &VkCommandPool,
-        data: &[f32],
+        data: &[T],
         usage: vk::BufferUsageFlags,
-    ) -> Result<VkBuffer, String> {
-        let size = (std::mem::size_of::<f32>() * data.len()) as u64;
+    ) -> Result<VkBuffer<T>, String> {
+        let size = (std::mem::size_of::<T>() * data.len()) as u64;
 
         // Create a staging buffer
         let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
         let staging_properties =
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
 
-        let (staging_buffer, staging_buffer_memory) = Self::create_buffer(
+        let (staging_buffer, staging_buffer_memory) = VkBuffer::create_buffer(
             instance,
             physical_device,
             &device,
@@ -45,13 +47,13 @@ impl VkBuffer {
         };
 
         unsafe {
-            std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr as *mut f32, data.len());
+            std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr as *mut T, data.len());
             device.inner.unmap_memory(staging_buffer_memory);
         }
 
         // Create the target buffer
         let target_properties = vk::MemoryPropertyFlags::DEVICE_LOCAL;
-        let (inner, memory) = Self::create_buffer(
+        let (inner, memory) = VkBuffer::create_buffer(
             instance,
             physical_device,
             &device,
@@ -61,7 +63,7 @@ impl VkBuffer {
         )?;
 
         // Copy data from the staging buffer to the target buffer
-        Self::copy_buffer(
+        VkBuffer::copy_buffer(
             &device,
             &command_pool,
             &queue.inner,
@@ -81,9 +83,12 @@ impl VkBuffer {
             inner,
             size: data.len() as u64,
             memory,
+            _type: PhantomData
         })
     }
+}
 
+impl VkBuffer<()> {
     pub fn create_buffer(
         instance: &VkInstance,
         physical_device: &VkPhysicalDevice,
@@ -226,7 +231,7 @@ impl VkBuffer {
     }
 }
 
-impl Drop for VkBuffer {
+impl<T> Drop for VkBuffer<T> {
     fn drop(&mut self) {
         unsafe {
             self.device.inner.free_memory(self.memory, None);

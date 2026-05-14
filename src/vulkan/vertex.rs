@@ -11,7 +11,7 @@ pub struct UniformBufferObject {
 pub struct Vertex {
     pub position: Vector<f32, 3>,
     pub normal: Vector<f32, 3>,
-    pub color: Vector<f32, 3>,
+    pub color: Vector<f32, 4>,
 }
 
 impl Vertex {

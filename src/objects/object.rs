@@ -101,28 +101,26 @@ impl Object {
             let normal = if i < self.normals.len() {
                 self.normals[i]
             } else {
-                Vector::new([1.0, 0.0, 0.0]) // Default normal
+                Vector::new([1.0, 0.0, 0.0])
             };
 
-            let color = Vector::new([0.7, 0.7, 0.7]); // Default color
+            let color = Vector::new([0.7, 0.7, 0.7, 1.0]);
 
-            vertices.push(Vertex {
-                position: v.clone(),
-                normal,
-                color,
-            });
+            vertices.push(Vertex { position: *v, normal, color });
         }
 
         for group in &self.groups {
+            // Material color — pull dissolve for alpha
             let base_color = if let Some(material_name) = &group.material {
                 if let Some(material) = self.materials.get(material_name) {
-                    // Use diffuse color if available, otherwise use default
-                    material.kd.unwrap_or(Vector::new([0.7, 0.7, 0.7]))
+                    let kd = material.kd.unwrap_or(Vector::new([0.7, 0.7, 0.7]));
+                    let alpha = material.dissolve.unwrap_or(1.0);
+                    Vector::new([kd[0], kd[1], kd[2], alpha])
                 } else {
-                    Vector::new([0.7, 0.7, 0.7])
+                    Vector::new([0.7, 0.7, 0.7, 1.0])
                 }
             } else {
-                Vector::new([0.7, 0.7, 0.7])
+                Vector::new([0.7, 0.7, 0.7, 1.0])
             };
 
             // Apply the material color to vertices referenced by this group
