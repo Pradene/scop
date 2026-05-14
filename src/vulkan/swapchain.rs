@@ -32,11 +32,10 @@ impl VkSwapchain {
         present_mode: vk::PresentModeKHR,
         extent: vk::Extent2D,
     ) -> Result<VkSwapchain, String> {
-        let image_count = std::cmp::min(
-            capabilities.max_image_count,
-            capabilities.min_image_count + 1,
-        )
-        .max(capabilities.min_image_count + 1);
+        let mut image_count = capabilities.min_image_count + 1;
+        if capabilities.max_image_count > 0 && image_count > capabilities.max_image_count {
+            image_count = capabilities.max_image_count;
+        }
 
         let image_format = surface_format.format;
         let mut create_info = vk::SwapchainCreateInfoKHR {
@@ -230,10 +229,12 @@ impl VkSwapchain {
         surface_format: vk::SurfaceFormatKHR,
         present_mode: vk::PresentModeKHR,
         extent: vk::Extent2D,
-    ) {
+    ) -> Result<(), String> {
         let _ = unsafe { self.device.inner.device_wait_idle() };
 
-        let swapchain = VkSwapchain::new(
+        self.destroy();
+
+        match VkSwapchain::new(
             instance,
             surface,
             physical_device,
@@ -243,10 +244,12 @@ impl VkSwapchain {
             surface_format,
             present_mode,
             extent,
-        )
-        .unwrap();
+        ) {
+            Ok(swapchain) => *self = swapchain,
+            Err(e) => return Err(format!("Swapchain doesn't exist: {}", e)),
+        };
 
-        *self = swapchain;
+        Ok(())
     }
 
     pub fn destroy(&mut self) {
@@ -274,8 +277,8 @@ impl VkSwapchain {
     }
 }
 
-impl Drop for VkSwapchain {
-    fn drop(&mut self) {
-        self.destroy();
-    }
-}
+// impl Drop for VkSwapchain {
+//     fn drop(&mut self) {
+//         self.destroy();
+//     }
+// }

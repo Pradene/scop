@@ -1,9 +1,9 @@
 use ash::vk;
-use std::ffi::c_void;
 use std::sync::Arc;
 
 use lineal::{Matrix, Vector};
 
+use crate::vulkan::uniform_buffer::UniformBuffer;
 use crate::camera::Camera;
 use crate::objects::Object;
 use crate::vulkan::query_swapchain_support;
@@ -18,39 +18,45 @@ use crate::vulkan::{
 use winit::window::Window;
 
 pub struct VkContext {
+    // Sync primitives first (depend on device only)
     pub image_available_semaphores: Vec<VkSemaphore>,
     pub render_finished_semaphores: Vec<VkSemaphore>,
     pub in_flight_fences: Vec<VkFence>,
 
-    pub descriptor_pool: VkDescriptorPool,
+    // Descriptors
     pub descriptor_sets: Vec<VkDescriptorSet>,
+    pub descriptor_pool: VkDescriptorPool,
     pub descriptor_set_layout: VkDescriptorSetLayout,
 
-    pub uniform_buffers: Vec<vk::Buffer>,
-    pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
-    pub uniform_buffers_mapped: Vec<*mut std::ffi::c_void>,
-
+    // Buffers
+    pub uniform_buffers: Vec<UniformBuffer>,
     pub vertex_buffer: VkBuffer<Vertex>,
     pub index_buffer: VkBuffer<u32>,
 
+    // Commands
     pub command_pool: VkCommandPool,
-    pub render_pass: VkRenderPass,
-    pub pipeline: VkPipeline,
 
+    // Swapchain (depends on render_pass)
     pub swapchain: VkSwapchain,
 
+    // Pipeline & render pass
+    pub pipeline: VkPipeline,
+    pub render_pass: VkRenderPass,
+
+    // Queues (just handles, no real cleanup)
     pub present_queue: VkQueue,
     pub graphics_queue: VkQueue,
 
+    // Core — must outlive everything above
     pub device: Arc<VkDevice>,
     pub physical_device: VkPhysicalDevice,
     pub surface: VkSurface,
-    pub instance: VkInstance,
+    pub instance: VkInstance,  // last, outlives everything
+
+    // Non-Vulkan
     pub frame: u32,
     pub start: std::time::Instant,
-
     pub object: Object,
-
     pub camera: Camera,
 }
 
@@ -126,12 +132,11 @@ impl VkContext {
             index_usage,
         )?;
 
-        let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
+        let uniform_buffers =
             VkContext::create_uniform_buffers(
                 &instance,
                 &physical_device,
-                &device,
-                std::mem::size_of::<UniformBufferObject>() as u64,
+                device.clone(),
             )?;
 
         let descriptor_pool = VkDescriptorPool::new(device.clone())?;
@@ -168,8 +173,6 @@ impl VkContext {
             vertex_buffer,
             index_buffer,
             uniform_buffers,
-            uniform_buffers_memory,
-            uniform_buffers_mapped,
             descriptor_pool,
             descriptor_sets,
             descriptor_set_layout,
@@ -233,45 +236,13 @@ impl VkContext {
     fn create_uniform_buffers(
         instance: &VkInstance,
         physical_device: &VkPhysicalDevice,
-        device: &VkDevice,
-        buffer_size: u64,
-    ) -> Result<(Vec<vk::Buffer>, Vec<vk::DeviceMemory>, Vec<*mut c_void>), String> {
-        let capacity = MAX_FRAMES_IN_FLIGHT as usize;
-        let mut uniform_buffers = Vec::with_capacity(capacity);
-        let mut uniform_buffers_memory = Vec::with_capacity(capacity);
-        let mut uniform_buffers_mapped = Vec::with_capacity(capacity);
+        device: Arc<VkDevice>,
+    ) -> Result<Vec<UniformBuffer>, String> {
+        let size = std::mem::size_of::<UniformBufferObject>() as u64;
 
-        for _ in 0..capacity {
-            let usage = vk::BufferUsageFlags::UNIFORM_BUFFER;
-            let properties =
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
-            let (buffer, buffer_memory) = VkBuffer::create_buffer(
-                &instance,
-                &physical_device,
-                &device,
-                &buffer_size,
-                &usage,
-                &properties,
-            )
-            .unwrap();
-
-            let buffer_mapped = unsafe {
-                device
-                    .inner
-                    .map_memory(buffer_memory, 0, buffer_size, vk::MemoryMapFlags::empty())
-                    .map_err(|e| format!("Failed to map memory: {}", e))?
-            };
-
-            uniform_buffers.push(buffer);
-            uniform_buffers_memory.push(buffer_memory);
-            uniform_buffers_mapped.push(buffer_mapped);
-        }
-
-        return Ok((
-            uniform_buffers,
-            uniform_buffers_memory,
-            uniform_buffers_mapped,
-        ));
+        (0..MAX_FRAMES_IN_FLIGHT)
+            .map(|_| UniformBuffer::new(instance, physical_device, device.clone(), size))
+            .collect()
     }
 
     fn update_uniform_buffer(&mut self, current_image: u32) {
@@ -289,13 +260,7 @@ impl VkContext {
         let proj = self.camera.projection_matrix();
 
         let ubo = UniformBufferObject { model, view, proj };
-
-        let src = &ubo as *const _ as *const u8;
-        let dst = self.uniform_buffers_mapped[current_image as usize] as *mut u8;
-        let size = std::mem::size_of::<UniformBufferObject>();
-        unsafe {
-            std::ptr::copy_nonoverlapping(src, dst, size);
-        }
+        self.uniform_buffers[current_image as usize].write(&ubo);
     }
 
     pub fn draw_frame(&mut self, window: &Window) {
@@ -507,7 +472,7 @@ impl VkContext {
         let present_mode = VkContext::choose_present_mode(&support_details.present_modes);
         let extent = VkContext::choose_extent(window, &support_details.capabilities);
 
-        self.swapchain.resize(
+        return self.swapchain.resize(
             &self.instance,
             &self.surface,
             &self.physical_device,
@@ -518,8 +483,6 @@ impl VkContext {
             present_mode,
             extent,
         );
-
-        return Ok(());
     }
 }
 
@@ -527,15 +490,6 @@ impl Drop for VkContext {
     fn drop(&mut self) {
         unsafe {
             let _ = self.device.inner.device_wait_idle();
-
-            for i in 0..self.uniform_buffers.len() {
-                self.device
-                    .inner
-                    .destroy_buffer(self.uniform_buffers[i], None);
-                self.device
-                    .inner
-                    .free_memory(self.uniform_buffers_memory[i], None);
-            }
         }
     }
 }

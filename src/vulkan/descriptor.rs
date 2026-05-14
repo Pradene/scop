@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use ash::vk;
 
+use crate::vulkan::UniformBuffer;
 use crate::vulkan::UniformBufferObject;
 use crate::vulkan::VkDevice;
 use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
@@ -39,7 +40,7 @@ impl VkDescriptorPool {
     pub fn create_sets(
         &self,
         set_layout: &VkDescriptorSetLayout,
-        uniform_buffers: &Vec<vk::Buffer>,
+        uniform_buffers: &Vec<UniformBuffer>,
     ) -> Result<Vec<VkDescriptorSet>, String> {
         let layouts = vec![set_layout.inner; MAX_FRAMES_IN_FLIGHT as usize];
 
@@ -60,7 +61,7 @@ impl VkDescriptorPool {
 
         for index in 0..MAX_FRAMES_IN_FLIGHT {
             let buffer_info = vk::DescriptorBufferInfo {
-                buffer: uniform_buffers[index as usize],
+                buffer: uniform_buffers[index as usize].buffer,
                 offset: 0,
                 range: std::mem::size_of::<UniformBufferObject>() as u64,
             };
