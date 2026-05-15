@@ -2,6 +2,7 @@ use scop::WINDOW_HEIGHT;
 use scop::{app::App, WINDOW_WIDTH};
 use scop::camera::Camera;
 use scop::objects::Object;
+use scop::scene::Scene;
 
 use lineal::Vector;
 
@@ -22,7 +23,10 @@ fn main() -> Result<(), String> {
         500.,
     );
 
-    let mut app = App::new(camera, object);
+    let mut scene = Scene::new(camera);
+    scene.add(object);
+
+    let mut app = App::new(scene);
 
     let _ = event_loop.run_app(&mut app);
 

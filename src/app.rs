@@ -1,4 +1,4 @@
-use crate::{camera::Camera, objects::Object, vulkan::VkContext, WINDOW_HEIGHT, WINDOW_WIDTH};
+use crate::{scene::Scene, renderer::Renderer, WINDOW_HEIGHT, WINDOW_WIDTH};
 
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::ActiveEventLoop, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowId}
@@ -6,9 +6,8 @@ use winit::{
 
 pub struct App {
     window: Option<Window>,
-    context: Option<VkContext>,
-    camera: Camera,
-    object: Object,
+    renderer: Option<Renderer>,
+    scene: Scene,
 }
 
 impl ApplicationHandler for App {
@@ -21,13 +20,13 @@ impl ApplicationHandler for App {
                 .create_window(window_attributes)
                 .expect("Failed to create window");
 
-            match VkContext::new(&window, &self.camera, &self.object) {
-                Ok(context) => {
-                    self.context = Some(context);
-                    println!("Vulkan context initialized successfully.");
+            match Renderer::new(&window) {
+                Ok(renderer) => {
+                    self.renderer = Some(renderer);
+                    println!("Vulkan renderer initialized successfully.");
                 }
                 Err(e) => {
-                    println!("Failed to create Vulkan context: {:?}", e);
+                    println!("Failed to create Vulkan renderer: {:?}", e);
                     return;
                 }
             }
@@ -43,16 +42,16 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
-                if let Some(context) = &mut self.context {
-                    context.draw_frame(self.window.as_ref().unwrap());
+                if let Some(renderer) = &mut self.renderer {
+                    let _ = renderer.draw(self.window.as_ref().unwrap(), &self.scene);
                 }
 
                 self.window.as_ref().unwrap().request_redraw();
             }
 
             WindowEvent::Resized(_) => {
-                if let Some(context) = &mut self.context {
-                    context.resize(&self.window.as_ref().unwrap()).unwrap();
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.resize(&self.window.as_ref().unwrap()).unwrap();
                 }
             }
 
@@ -71,12 +70,11 @@ impl ApplicationHandler for App {
 }
 
 impl App {
-    pub fn new(camera: Camera, object: Object) -> App {
+    pub fn new(scene: Scene) -> App {
         return App {
             window: None,
-            context: None,
-            camera,
-            object,
+            renderer: None,
+            scene,
         };
     }
 }

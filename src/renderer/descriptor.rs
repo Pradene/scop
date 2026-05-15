@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use ash::vk;
 
-use crate::vulkan::UniformBuffer;
-use crate::vulkan::UniformBufferObject;
-use crate::vulkan::VkDevice;
-use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
+use crate::renderer::UniformBuffer;
+use crate::renderer::UniformBufferObject;
+use crate::renderer::VkDevice;
+use crate::renderer::MAX_FRAMES_IN_FLIGHT;
 
 pub struct VkDescriptorPool {
     device: Arc<VkDevice>,

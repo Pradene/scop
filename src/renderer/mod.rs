@@ -1,6 +1,6 @@
 mod buffer;
 mod command;
-mod context;
+mod renderer;
 mod descriptor;
 mod device;
 mod image;
@@ -19,7 +19,7 @@ mod uniform_buffer;
 
 pub use buffer::*;
 pub use command::*;
-pub use context::*;
+pub use renderer::*;
 pub use descriptor::*;
 pub use device::*;
 pub use image::*;

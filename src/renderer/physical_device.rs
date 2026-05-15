@@ -3,8 +3,8 @@ use std::ffi::CStr;
 
 use ash::{khr, vk, Instance};
 
-use crate::vulkan::DEVICE_EXTENSIONS;
-use crate::vulkan::{QueueFamiliesIndices, SwapChainSupportDetails, VkInstance, VkSurface};
+use crate::renderer::DEVICE_EXTENSIONS;
+use crate::renderer::{QueueFamiliesIndices, SwapChainSupportDetails, VkInstance, VkSurface};
 
 pub struct VkPhysicalDevice {
     pub inner: vk::PhysicalDevice,

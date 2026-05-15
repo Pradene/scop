@@ -1,6 +1,6 @@
 use ash::{khr, vk};
 
-use crate::vulkan::{VkInstance, VkPhysicalDevice};
+use crate::renderer::{VkInstance, VkPhysicalDevice};
 
 fn find_supported_format(
     instance: &VkInstance,

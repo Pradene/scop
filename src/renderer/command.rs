@@ -1,5 +1,5 @@
-use crate::vulkan::MAX_FRAMES_IN_FLIGHT;
-use crate::vulkan::{VkDevice, VkPhysicalDevice};
+use crate::renderer::MAX_FRAMES_IN_FLIGHT;
+use crate::renderer::{VkDevice, VkPhysicalDevice};
 
 use ash::vk;
 use std::sync::Arc;

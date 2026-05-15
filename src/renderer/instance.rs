@@ -1,4 +1,4 @@
-use crate::vulkan::{VALIDATION_LAYERS, VALIDATION_LAYERS_ENABLED};
+use crate::renderer::{VALIDATION_LAYERS, VALIDATION_LAYERS_ENABLED};
 
 use std::ffi::CString;
 

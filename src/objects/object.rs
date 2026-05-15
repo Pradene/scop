@@ -6,7 +6,7 @@ use std::path::Path;
 use lineal::Vector;
 
 use crate::materials::{Material, MaterialParser};
-use crate::vulkan::Vertex;
+use crate::renderer::Vertex;
 
 #[derive(Debug, Clone)]
 pub struct FaceVertex {

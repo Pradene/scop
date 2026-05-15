@@ -1,5 +1,5 @@
-use crate::vulkan::DEVICE_EXTENSIONS;
-use crate::vulkan::{VkInstance, VkPhysicalDevice};
+use crate::renderer::DEVICE_EXTENSIONS;
+use crate::renderer::{VkInstance, VkPhysicalDevice};
 
 use ash::{vk, Device};
 

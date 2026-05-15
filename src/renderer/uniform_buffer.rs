@@ -2,7 +2,7 @@ use ash::vk;
 use std::ffi::c_void;
 use std::sync::Arc;
 
-use crate::vulkan::{VkBuffer, VkDevice, VkInstance, VkPhysicalDevice};
+use crate::renderer::{VkBuffer, VkDevice, VkInstance, VkPhysicalDevice};
 
 pub struct UniformBuffer {
     pub buffer: vk::Buffer,

@@ -1,4 +1,4 @@
-use crate::vulkan::VkDevice;
+use crate::renderer::VkDevice;
 
 use ash::vk;
 use std::sync::Arc;

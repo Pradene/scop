@@ -1,6 +1,6 @@
 use ash::vk::{self, ImageSubresourceRange};
 
-use crate::vulkan::VkDevice;
+use crate::renderer::VkDevice;
 
 use super::{VkBuffer, VkInstance, VkPhysicalDevice};
 

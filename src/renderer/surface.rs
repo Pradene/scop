@@ -1,6 +1,6 @@
 use ash::{khr, vk, Entry, Instance};
 
-use crate::vulkan::VkInstance;
+use crate::renderer::VkInstance;
 use winit::{
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::Window,

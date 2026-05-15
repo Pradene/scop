@@ -1,4 +1,4 @@
-use crate::vulkan::{VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkQueue};
+use crate::renderer::{VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkQueue};
 
 use ash::vk;
 use std::sync::Arc;
