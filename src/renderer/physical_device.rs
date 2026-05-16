@@ -3,8 +3,16 @@ use std::ffi::CStr;
 
 use ash::{khr, vk, Instance};
 
-use crate::renderer::DEVICE_EXTENSIONS;
-use crate::renderer::{QueueFamiliesIndices, SwapChainSupportDetails, VkInstance, VkSurface};
+use super::DEVICE_EXTENSIONS;
+use super::{QueueFamiliesIndices, VkInstance, VkSurface};
+
+
+#[derive(Clone)]
+pub struct SwapChainSupportDetails {
+    pub capabilities: vk::SurfaceCapabilitiesKHR,
+    pub formats: Vec<vk::SurfaceFormatKHR>,
+    pub present_modes: Vec<vk::PresentModeKHR>,
+}
 
 pub struct VkPhysicalDevice {
     pub inner: vk::PhysicalDevice,

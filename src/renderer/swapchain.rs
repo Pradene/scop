@@ -2,7 +2,7 @@ use ash::{khr, vk};
 use std::sync::Arc;
 
 use super::{create_image, create_image_view, find_depth_format};
-use super::{VkDevice, VkInstance, VkPhysicalDevice, VkQueue, VkRenderPass, VkSurface};
+use super::{VkDevice, VkQueue, VkRenderPass, VkContext};
 
 pub struct VkSwapchain {
     device: Arc<VkDevice>,
@@ -22,10 +22,7 @@ pub struct VkSwapchain {
 
 impl VkSwapchain {
     pub fn new(
-        instance: &VkInstance,
-        surface: &VkSurface,
-        physical_device: &VkPhysicalDevice,
-        device: Arc<VkDevice>,
+        context: &VkContext,
         render_pass: &VkRenderPass,
         capabilities: vk::SurfaceCapabilitiesKHR,
         surface_format: vk::SurfaceFormatKHR,
@@ -40,7 +37,7 @@ impl VkSwapchain {
         let image_format = surface_format.format;
         let mut create_info = vk::SwapchainCreateInfoKHR {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
-            surface: surface.inner,
+            surface: context.surface.inner,
             min_image_count: image_count,
             image_format,
             image_color_space: surface_format.color_space,
@@ -54,23 +51,22 @@ impl VkSwapchain {
             ..Default::default()
         };
 
-        if physical_device.queue_families.graphics_family
-            != physical_device.queue_families.present_family
-        {
+        let graphics_family = context.graphics_family();
+        let present_family = context.present_family();
+        let queue_family_indices = [
+            graphics_family,
+            present_family,
+        ];
+
+        if graphics_family != present_family {
             create_info.image_sharing_mode = vk::SharingMode::CONCURRENT;
             create_info.queue_family_index_count = 2;
-            create_info.p_queue_family_indices = [
-                physical_device.queue_families.graphics_family.unwrap(),
-                physical_device.queue_families.present_family.unwrap(),
-            ]
-            .as_ptr()
+            create_info.p_queue_family_indices = queue_family_indices.as_ptr();
         } else {
             create_info.image_sharing_mode = vk::SharingMode::EXCLUSIVE;
-            create_info.queue_family_index_count = 0;
-            create_info.p_queue_family_indices = std::ptr::null();
         }
 
-        let loader = khr::swapchain::Device::new(&instance.inner, &device.inner);
+        let loader = khr::swapchain::Device::new(&context.instance.inner, &context.device().inner);
         let inner = unsafe {
             loader
                 .create_swapchain(&create_info, None)
@@ -83,14 +79,12 @@ impl VkSwapchain {
                 .map_err(|e| format!("Failed to get swapchain images: {}", e))?
         };
 
-        let image_views = VkSwapchain::create_image_views(&device, &images, &image_format)?;
+        let image_views = VkSwapchain::create_image_views(&context.device(), &images, &image_format)?;
 
-        let format = find_depth_format(instance, physical_device)?;
+        let format = find_depth_format(&context.instance, &context.physical_device)?;
 
         let (depth_image, depth_image_memory) = create_image(
-            instance,
-            physical_device,
-            &device,
+            context,
             extent.width,
             extent.height,
             format,
@@ -100,7 +94,7 @@ impl VkSwapchain {
         )?;
 
         let depth_image_view =
-            create_image_view(&device, &depth_image, format, vk::ImageAspectFlags::DEPTH)?;
+            create_image_view(&context.device(), &depth_image, format, vk::ImageAspectFlags::DEPTH)?;
 
         let mut framebuffers = Vec::new();
         for image_view in &image_views {
@@ -118,7 +112,7 @@ impl VkSwapchain {
             };
 
             let framebuffer = unsafe {
-                device
+                context.device()
                     .inner
                     .create_framebuffer(&framebuffer_create_info, None)
                     .map_err(|e| format!("Failed to create framebuffer: {}", e))?
@@ -128,7 +122,7 @@ impl VkSwapchain {
         }
 
         return Ok(VkSwapchain {
-            device,
+            device: context.device().clone(),
             loader,
             inner,
             images,
@@ -220,25 +214,19 @@ impl VkSwapchain {
 
     pub fn resize(
         &mut self,
-        instance: &VkInstance,
-        surface: &VkSurface,
-        physical_device: &VkPhysicalDevice,
-        device: Arc<VkDevice>,
+        context: &VkContext,
         render_pass: &VkRenderPass,
         capabilities: vk::SurfaceCapabilitiesKHR,
         surface_format: vk::SurfaceFormatKHR,
         present_mode: vk::PresentModeKHR,
         extent: vk::Extent2D,
     ) -> Result<(), String> {
-        let _ = unsafe { self.device.inner.device_wait_idle() };
+        self.device.wait_idle();
 
         self.destroy();
 
         match VkSwapchain::new(
-            instance,
-            surface,
-            physical_device,
-            device,
+            context,
             render_pass,
             capabilities,
             surface_format,

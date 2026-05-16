@@ -1,8 +1,8 @@
-use crate::renderer::MAX_FRAMES_IN_FLIGHT;
-use crate::renderer::{VkDevice, VkPhysicalDevice};
-
 use ash::vk;
 use std::sync::Arc;
+
+use super::{VkDevice, VkPhysicalDevice};
+use super::MAX_FRAMES_IN_FLIGHT;
 
 pub struct VkCommandPool {
     device: Arc<VkDevice>,

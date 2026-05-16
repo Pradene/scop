@@ -2,10 +2,8 @@ use std::sync::Arc;
 
 use ash::vk;
 
-use crate::renderer::UniformBuffer;
-use crate::renderer::UniformBufferObject;
-use crate::renderer::VkDevice;
-use crate::renderer::MAX_FRAMES_IN_FLIGHT;
+use super::{UniformBuffer, VkDevice, Uniforms};
+use super::MAX_FRAMES_IN_FLIGHT;
 
 pub struct VkDescriptorPool {
     device: Arc<VkDevice>,
@@ -63,7 +61,7 @@ impl VkDescriptorPool {
             let buffer_info = vk::DescriptorBufferInfo {
                 buffer: uniform_buffers[index as usize].buffer,
                 offset: 0,
-                range: std::mem::size_of::<UniformBufferObject>() as u64,
+                range: std::mem::size_of::<Uniforms>() as u64,
             };
 
             let descriptor_write = vk::WriteDescriptorSet {

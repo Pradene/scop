@@ -1,7 +1,7 @@
-use crate::renderer::VkDevice;
-
 use ash::vk;
 use std::sync::Arc;
+
+use super::VkDevice;
 
 pub struct VkFence {
     device: Arc<VkDevice>,

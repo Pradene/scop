@@ -2,7 +2,15 @@ use ash::vk;
 use std::ffi::c_void;
 use std::sync::Arc;
 
-use crate::renderer::{VkBuffer, VkDevice, VkInstance, VkPhysicalDevice};
+use super::{VkBuffer, VkContext, VkDevice};
+use crate::math::Mat4;
+
+
+pub struct Uniforms {
+    pub model: Mat4,
+    pub view: Mat4,
+    pub proj: Mat4,
+}
 
 pub struct UniformBuffer {
     pub buffer: vk::Buffer,
@@ -13,19 +21,16 @@ pub struct UniformBuffer {
 
 impl UniformBuffer {
     pub fn new(
-        instance: &VkInstance,
-        physical_device: &VkPhysicalDevice,
-        device: Arc<VkDevice>,
-        size: u64,
+        context: &VkContext,
     ) -> Result<UniformBuffer, String> {
+        let device = context.device();
         let usage = vk::BufferUsageFlags::UNIFORM_BUFFER;
         let properties =
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
 
+        let size = std::mem::size_of::<Uniforms>() as u64;
         let (buffer, memory) = VkBuffer::create_buffer(
-            instance,
-            physical_device,
-            &device,
+            context,
             &size,
             &usage,
             &properties,

@@ -1,4 +1,4 @@
-use crate::{scene::Scene, renderer::Renderer, WINDOW_HEIGHT, WINDOW_WIDTH};
+use crate::{WINDOW_HEIGHT, WINDOW_WIDTH, renderer::{Renderer, VkContext}, scene::Scene};
 
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::ActiveEventLoop, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowId}
@@ -16,22 +16,24 @@ impl ApplicationHandler for App {
             let window_attributes = Window::default_attributes()
                 .with_title("Scop")
                 .with_inner_size(PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT));
+
             let window = event_loop
                 .create_window(window_attributes)
                 .expect("Failed to create window");
 
-            match Renderer::new(&window) {
+            self.window = Some(window);
+            let window = self.window.as_ref().unwrap();
+
+            let context = VkContext::new(window).unwrap();
+            match Renderer::new(window, context) {
                 Ok(renderer) => {
                     self.renderer = Some(renderer);
                     println!("Vulkan renderer initialized successfully.");
                 }
                 Err(e) => {
                     println!("Failed to create Vulkan renderer: {:?}", e);
-                    return;
                 }
             }
-
-            self.window = Some(window);
         }
     }
 

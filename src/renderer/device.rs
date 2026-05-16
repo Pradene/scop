@@ -60,6 +60,10 @@ impl VkDevice {
 
         return Ok(VkDevice { inner });
     }
+
+    pub fn wait_idle(&self) {
+        unsafe { let _ = self.inner.device_wait_idle(); }
+    }
 }
 
 impl Drop for VkDevice {

@@ -1,8 +1,8 @@
-use crate::renderer::{VkCommandPool, VkDevice, VkInstance, VkPhysicalDevice, VkQueue};
-
 use ash::vk;
 use std::sync::Arc;
 use std::marker::PhantomData;
+
+use super::{VkCommandPool, VkContext, VkDevice, VkQueue};
 
 pub struct VkBuffer<T> {
     device: Arc<VkDevice>,
@@ -14,14 +14,13 @@ pub struct VkBuffer<T> {
 
 impl<T: Copy> VkBuffer<T> {
     pub fn new(
-        instance: &VkInstance,
-        physical_device: &VkPhysicalDevice,
-        device: Arc<VkDevice>,
+        context: &VkContext,
         queue: &VkQueue,
         command_pool: &VkCommandPool,
         data: &[T],
         usage: vk::BufferUsageFlags,
     ) -> Result<VkBuffer<T>, String> {
+        let device = context.device();
         let size = (std::mem::size_of::<T>() * data.len()) as u64;
 
         // Create a staging buffer
@@ -30,9 +29,7 @@ impl<T: Copy> VkBuffer<T> {
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
 
         let (staging_buffer, staging_buffer_memory) = VkBuffer::create_buffer(
-            instance,
-            physical_device,
-            &device,
+            context,
             &size,
             &staging_usage,
             &staging_properties,
@@ -54,9 +51,7 @@ impl<T: Copy> VkBuffer<T> {
         // Create the target buffer
         let target_properties = vk::MemoryPropertyFlags::DEVICE_LOCAL;
         let (inner, memory) = VkBuffer::create_buffer(
-            instance,
-            physical_device,
-            &device,
+            context,
             &size,
             &usage,
             &target_properties,
@@ -90,13 +85,12 @@ impl<T: Copy> VkBuffer<T> {
 
 impl VkBuffer<()> {
     pub fn create_buffer(
-        instance: &VkInstance,
-        physical_device: &VkPhysicalDevice,
-        device: &VkDevice,
+        context: &VkContext,
         size: &vk::DeviceSize,
         usage: &vk::BufferUsageFlags,
         properties: &vk::MemoryPropertyFlags,
     ) -> Result<(vk::Buffer, vk::DeviceMemory), String> {
+        let device = context.device();
         let create_info = vk::BufferCreateInfo {
             s_type: vk::StructureType::BUFFER_CREATE_INFO,
             size: *size,
@@ -113,8 +107,7 @@ impl VkBuffer<()> {
             s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,
             allocation_size: memory_requirements.size,
             memory_type_index: Self::find_memory_type(
-                instance,
-                physical_device,
+                context,
                 memory_requirements.memory_type_bits,
                 *properties,
             )
@@ -207,15 +200,14 @@ impl VkBuffer<()> {
     }
 
     pub fn find_memory_type(
-        instance: &VkInstance,
-        physical_device: &VkPhysicalDevice,
+        context: &VkContext,
         type_filter: u32,
         properties: vk::MemoryPropertyFlags,
     ) -> Result<u32, String> {
         let memory_properties = unsafe {
-            instance
+            context.instance
                 .inner
-                .get_physical_device_memory_properties(physical_device.inner)
+                .get_physical_device_memory_properties(context.physical_device.inner)
         };
 
         for index in 0..memory_properties.memory_type_count {

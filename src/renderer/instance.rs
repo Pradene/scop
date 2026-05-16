@@ -1,11 +1,11 @@
-use crate::renderer::{VALIDATION_LAYERS, VALIDATION_LAYERS_ENABLED};
-
 use std::ffi::CString;
 
 use ash::{vk, Entry, Instance};
-
 use ash_window;
+
 use winit::{raw_window_handle::HasDisplayHandle, window::Window};
+
+use super::{VALIDATION_LAYERS, VALIDATION_LAYERS_ENABLED};
 
 pub struct VkInstance {
     pub entry: Entry,

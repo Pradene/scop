@@ -1,13 +1,9 @@
-use ash::vk::{self, ImageSubresourceRange};
+use ash::vk;
 
-use crate::renderer::VkDevice;
-
-use super::{VkBuffer, VkInstance, VkPhysicalDevice};
+use super::{VkBuffer, VkContext, VkDevice};
 
 pub fn create_image(
-    instance: &VkInstance,
-    physical_device: &VkPhysicalDevice,
-    device: &VkDevice,
+    context: &VkContext,
     width: u32,
     height: u32,
     format: vk::Format,
@@ -35,16 +31,15 @@ pub fn create_image(
     };
 
     let image = unsafe {
-        device
+        context.device()
             .inner
             .create_image(&create_info, None)
             .map_err(|e| format!("Failed to create image: {}", e))?
     };
 
-    let memory_requirements = unsafe { device.inner.get_image_memory_requirements(image) };
+    let memory_requirements = unsafe { context.device().inner.get_image_memory_requirements(image) };
     let memory_type = VkBuffer::find_memory_type(
-        instance,
-        physical_device,
+        context,
         memory_requirements.memory_type_bits,
         properties,
     )?;
@@ -57,14 +52,14 @@ pub fn create_image(
     };
 
     let memory = unsafe {
-        device
+        context.device()
             .inner
             .allocate_memory(&allocate_info, None)
             .map_err(|e| format!("Failed to allocate image memory: {}", e))?
     };
 
     let _ = unsafe {
-        device
+        context.device()
             .inner
             .bind_image_memory(image, memory, 0)
             .map_err(|e| format!("Failed to bind memory to image: {}", e))
@@ -84,7 +79,7 @@ pub fn create_image_view(
         image: *image,
         view_type: vk::ImageViewType::TYPE_2D,
         format,
-        subresource_range: ImageSubresourceRange {
+        subresource_range: vk::ImageSubresourceRange {
             aspect_mask: aspect_flags,
             base_mip_level: 0,
             level_count: 1,

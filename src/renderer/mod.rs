@@ -16,6 +16,7 @@ mod sync;
 mod utils;
 mod vertex;
 mod uniform_buffer;
+mod context;
 
 pub use buffer::*;
 pub use command::*;
@@ -35,6 +36,7 @@ pub use sync::*;
 pub use utils::*;
 pub use vertex::*;
 pub use uniform_buffer::*;
+pub use context::*;
 
 use ash::vk;
 use std::ffi::CStr;

@@ -1,16 +1,13 @@
 use ash::vk;
-use std::sync::Arc;
 
 use crate::math::{Mat4, Vec3};
+use crate::renderer::Uniforms;
 use crate::scene::{Scene, SceneObject};
-use crate::renderer::uniform_buffer::UniformBuffer;
-use crate::renderer::query_swapchain_support;
-use crate::renderer::UniformBufferObject;
-use crate::renderer::MAX_FRAMES_IN_FLIGHT;
-use crate::renderer::{
+use super::MAX_FRAMES_IN_FLIGHT;
+use super::{
     Vertex, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet,
-    VkDescriptorSetLayout, VkDevice, VkFence, VkInstance, VkPhysicalDevice, VkPipeline, VkQueue,
-    VkRenderPass, VkSemaphore, VkSurface, VkSwapchain,
+    VkDescriptorSetLayout, VkFence, VkPipeline, VkQueue,
+    VkRenderPass, VkSemaphore, VkSwapchain, VkContext, UniformBuffer, VkPhysicalDevice
 };
 
 use winit::window::Window;
@@ -50,33 +47,25 @@ pub struct Renderer {
     pub graphics_queue: VkQueue,
 
     // Core
-    pub device: Arc<VkDevice>,
-    pub physical_device: VkPhysicalDevice,
-    pub surface: VkSurface,
-    pub instance: VkInstance,
+    pub context: VkContext,
 
     pub frame: u32,
     pub start: std::time::Instant,
 }
 
 impl Renderer {
-    pub fn new(window: &Window) -> Result<Renderer, String> {
-        let instance = VkInstance::new(window)?;
-        let surface = VkSurface::new(window, &instance)?;
-        let physical_device = VkPhysicalDevice::new(&instance, &surface)?;
-        let device = Arc::new(VkDevice::new(&instance, &physical_device)?);
-
+    pub fn new(window: &Window, context: VkContext) -> Result<Renderer, String> {
         let graphics_queue = VkQueue::new(
-            device.clone(),
-            physical_device.queue_families.graphics_family.unwrap(),
+            context.device(),
+            context.graphics_family(),
         );
         let present_queue = VkQueue::new(
-            device.clone(),
-            physical_device.queue_families.present_family.unwrap(),
+            context.device(),
+            context.present_family(),
         );
 
         let support_details =
-            query_swapchain_support(&physical_device.inner, &surface.loader, &surface.inner)?;
+            VkPhysicalDevice::query_swapchain_support(&context.physical_device.inner, &context.surface.loader, &context.surface.inner)?;
 
         let capabilities = support_details.capabilities;
         let surface_format = Renderer::choose_surface_format(&support_details.formats);
@@ -85,25 +74,24 @@ impl Renderer {
         let extent = Renderer::choose_extent(&support_details.capabilities, width, height);
 
         let render_pass = VkRenderPass::new(
-            &instance,
-            &physical_device,
-            device.clone(),
+            &context.instance,
+            &context.physical_device,
+            context.device(),
             surface_format.format,
         )?;
 
         let swapchain = VkSwapchain::new(
-            &instance, &surface, &physical_device, device.clone(),
+            &context,
             &render_pass, capabilities, surface_format, present_mode, extent,
         )?;
 
-        let descriptor_set_layout = VkDescriptorSetLayout::new(device.clone())?;
-        let pipeline = VkPipeline::new(device.clone(), &render_pass, &descriptor_set_layout)?;
-        let command_pool = VkCommandPool::new(&physical_device, device.clone())?;
+        let descriptor_set_layout = VkDescriptorSetLayout::new(context.device())?;
+        let pipeline = VkPipeline::new(context.device(), &render_pass, &descriptor_set_layout)?;
+        let command_pool = VkCommandPool::new(&context.physical_device, context.device())?;
 
-        let uniform_buffers =
-            Renderer::create_uniform_buffers(&instance, &physical_device, device.clone())?;
+        let uniform_buffers = Renderer::create_uniform_buffers(&context)?;
 
-        let descriptor_pool = VkDescriptorPool::new(device.clone())?;
+        let descriptor_pool = VkDescriptorPool::new(context.device())?;
         let descriptor_sets =
             descriptor_pool.create_sets(&descriptor_set_layout, &uniform_buffers)?;
 
@@ -112,16 +100,13 @@ impl Renderer {
         let mut in_flight_fences = Vec::new();
 
         for _ in 0..MAX_FRAMES_IN_FLIGHT {
-            image_available_semaphores.push(VkSemaphore::new(device.clone())?);
-            render_finished_semaphores.push(VkSemaphore::new(device.clone())?);
-            in_flight_fences.push(VkFence::new(device.clone())?);
+            image_available_semaphores.push(VkSemaphore::new(context.device())?);
+            render_finished_semaphores.push(VkSemaphore::new(context.device())?);
+            in_flight_fences.push(VkFence::new(context.device())?);
         }
 
         Ok(Renderer {
-            instance,
-            surface,
-            physical_device,
-            device,
+            context,
             graphics_queue,
             present_queue,
             swapchain,
@@ -162,14 +147,12 @@ impl Renderer {
         let (vertices, indices) = obj.object.get_vertices_and_indices();
 
         let vertex_buffer = VkBuffer::new(
-            &self.instance, &self.physical_device, self.device.clone(),
-            &self.graphics_queue, &self.command_pool, &vertices,
+            &self.context, &self.graphics_queue, &self.command_pool, &vertices,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
         )?;
 
         let index_buffer = VkBuffer::new(
-            &self.instance, &self.physical_device, self.device.clone(),
-            &self.graphics_queue, &self.command_pool, &indices,
+            &self.context, &self.graphics_queue, &self.command_pool, &indices,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
         )?;
 
@@ -191,7 +174,7 @@ impl Renderer {
             .rotate((90.0 * elapsed).to_radians(), Vec3::Y)
             * Mat4::identity().translate(center * -1.);
 
-        let ubo = UniformBufferObject {
+        let ubo = Uniforms {
             model,
             view: scene.camera.get_view_matrix(),
             proj: scene.camera.get_projection_matrix(),
@@ -205,7 +188,7 @@ impl Renderer {
         self.sync_meshes(scene)?;
 
         unsafe {
-            self.device.inner.wait_for_fences(
+            self.context.device().inner.wait_for_fences(
                 &[self.in_flight_fences[self.frame as usize].inner],
                 true,
                 u64::MAX,
@@ -241,11 +224,11 @@ impl Renderer {
         self.update_uniform_buffer(self.frame, scene);
 
         unsafe {
-            self.device.inner
+            self.context.device().inner
                 .reset_fences(&[self.in_flight_fences[self.frame as usize].inner])
                 .map_err(|e| format!("Failed to reset fence: {}", e))?;
 
-            self.device.inner.reset_command_buffer(
+            self.context.device().inner.reset_command_buffer(
                 self.command_pool.buffers[self.frame as usize].inner,
                 vk::CommandBufferResetFlags::empty(),
             ).map_err(|e| format!("Failed to reset command buffer: {}", e))?;
@@ -315,22 +298,22 @@ impl Renderer {
         };
 
         unsafe {
-            self.device.inner
+            self.context.device().inner
                 .begin_command_buffer(*command_buffer, &begin_info)
                 .map_err(|e| format!("Failed to begin command buffer: {}", e))?;
 
-            self.device.inner.cmd_begin_render_pass(
+            self.context.device().inner.cmd_begin_render_pass(
                 *command_buffer, &render_pass_info, vk::SubpassContents::INLINE,
             );
 
-            self.device.inner.cmd_bind_pipeline(
+            self.context.device().inner.cmd_bind_pipeline(
                 *command_buffer, vk::PipelineBindPoint::GRAPHICS, self.pipeline.inner,
             );
 
-            self.device.inner.cmd_set_viewport(*command_buffer, 0, &[viewport]);
-            self.device.inner.cmd_set_scissor(*command_buffer, 0, &[scissor]);
+            self.context.device().inner.cmd_set_viewport(*command_buffer, 0, &[viewport]);
+            self.context.device().inner.cmd_set_scissor(*command_buffer, 0, &[scissor]);
 
-            self.device.inner.cmd_bind_descriptor_sets(
+            self.context.device().inner.cmd_bind_descriptor_sets(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline.layout,
@@ -341,20 +324,20 @@ impl Renderer {
 
             // draw each mesh
             for gpu_mesh in &self.meshes {
-                self.device.inner.cmd_bind_vertex_buffers(
+                self.context.device().inner.cmd_bind_vertex_buffers(
                     *command_buffer, 0, &[gpu_mesh.vertex_buffer.inner], &[0],
                 );
-                self.device.inner.cmd_bind_index_buffer(
+                self.context.device().inner.cmd_bind_index_buffer(
                     *command_buffer, gpu_mesh.index_buffer.inner, 0, vk::IndexType::UINT32,
                 );
-                self.device.inner.cmd_draw_indexed(
+                self.context.device().inner.cmd_draw_indexed(
                     *command_buffer, gpu_mesh.index_buffer.size as u32, 1, 0, 0, 0,
                 );
             }
 
-            self.device.inner.cmd_end_render_pass(*command_buffer);
+            self.context.device().inner.cmd_end_render_pass(*command_buffer);
 
-            self.device.inner
+            self.context.device().inner
                 .end_command_buffer(*command_buffer)
                 .map_err(|e| format!("Failed to end command buffer: {}", e))?;
         }
@@ -365,14 +348,14 @@ impl Renderer {
     // ── helpers ───────────────────────────────────────────────────────────────
 
     pub fn resize(&mut self, width:u32, height: u32) -> Result<(), String> {
-        unsafe { let _ = self.device.inner.device_wait_idle(); }
+        self.context.device().wait_idle();
 
-        let support_details = query_swapchain_support(
-            &self.physical_device.inner, &self.surface.loader, &self.surface.inner,
+        let support_details = VkPhysicalDevice::query_swapchain_support(
+            &self.context.physical_device.inner, &self.context.surface.loader, &self.context.surface.inner,
         )?;
 
         self.swapchain.resize(
-            &self.instance, &self.surface, &self.physical_device, self.device.clone(),
+            &self.context,
             &self.render_pass,
             support_details.capabilities,
             Renderer::choose_surface_format(&support_details.formats),
@@ -382,13 +365,10 @@ impl Renderer {
     }
 
     fn create_uniform_buffers(
-        instance: &VkInstance,
-        physical_device: &VkPhysicalDevice,
-        device: Arc<VkDevice>,
+        context: &VkContext,
     ) -> Result<Vec<UniformBuffer>, String> {
-        let size = std::mem::size_of::<UniformBufferObject>() as u64;
         (0..MAX_FRAMES_IN_FLIGHT)
-            .map(|_| UniformBuffer::new(instance, physical_device, device.clone(), size))
+            .map(|_| UniformBuffer::new(context))
             .collect()
     }
 
@@ -426,6 +406,6 @@ impl Renderer {
 
 impl Drop for Renderer {
     fn drop(&mut self) {
-        unsafe { let _ = self.device.inner.device_wait_idle(); }
+        self.context.device().wait_idle();
     }
 }
