@@ -1,8 +1,10 @@
 use ash::vk;
 
+use crate::materials::{Material, MaterialPushConstants};
 use crate::math::{Mat4, Vec3};
+use crate::objects::Object;
 use crate::renderer::Uniforms;
-use crate::scene::{Scene, SceneObject};
+use crate::scene::Scene;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
     Vertex, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet,
@@ -12,9 +14,14 @@ use super::{
 
 use winit::window::Window;
 
-pub struct GpuMesh {
+pub struct GpuGroup {
     pub vertex_buffer: VkBuffer<Vertex>,
     pub index_buffer: VkBuffer<u32>,
+    pub material: Material,
+}
+
+pub struct GpuMesh {
+    pub groups: Vec<GpuGroup>,
 }
 
 pub struct Renderer {
@@ -143,20 +150,31 @@ impl Renderer {
         Ok(())
     }
 
-    fn upload_mesh(&mut self, obj: &SceneObject) -> Result<(), String> {
-        let (vertices, indices) = obj.object.get_vertices_and_indices();
+    fn upload_mesh(&mut self, object: &Object) -> Result<(), String> {
+        let mut groups = Vec::new();
 
-        let vertex_buffer = VkBuffer::new(
-            &self.context, &self.graphics_queue, &self.command_pool, &vertices,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
-        )?;
+        for group in &object.groups {
+            let (vertices, indices) = object.get_group_vertices_and_indices(group);
+            if indices.is_empty() { continue; }
 
-        let index_buffer = VkBuffer::new(
-            &self.context, &self.graphics_queue, &self.command_pool, &indices,
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
-        )?;
+            let material = group.material.as_ref()
+                .and_then(|name| object.materials.get(name))
+                .cloned()
+                .unwrap_or_default();
 
-        self.meshes.push(GpuMesh { vertex_buffer, index_buffer });
+            let vertex_buffer = VkBuffer::new(
+                &self.context, &self.graphics_queue, &self.command_pool, &vertices,
+                vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+            )?;
+            let index_buffer = VkBuffer::new(
+                &self.context, &self.graphics_queue, &self.command_pool, &indices,
+                vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
+            )?;
+
+            groups.push(GpuGroup { vertex_buffer, index_buffer, material });
+        }
+
+        self.meshes.push(GpuMesh { groups });
         Ok(())
     }
 
@@ -167,7 +185,7 @@ impl Renderer {
 
         // take center from first object if present, else zero
         let center = scene.objects.first()
-            .map(|o| o.object.center)
+            .map(|o| o.center)
             .unwrap_or_else(|| Vec3::ZERO);
 
         let model = Mat4::identity()
@@ -322,17 +340,32 @@ impl Renderer {
                 &[],
             );
 
-            // draw each mesh
-            for gpu_mesh in &self.meshes {
-                self.context.device().inner.cmd_bind_vertex_buffers(
-                    *command_buffer, 0, &[gpu_mesh.vertex_buffer.inner], &[0],
-                );
-                self.context.device().inner.cmd_bind_index_buffer(
-                    *command_buffer, gpu_mesh.index_buffer.inner, 0, vk::IndexType::UINT32,
-                );
-                self.context.device().inner.cmd_draw_indexed(
-                    *command_buffer, gpu_mesh.index_buffer.size as u32, 1, 0, 0, 0,
-                );
+            for mesh in &self.meshes {
+                for group in &mesh.groups {
+                    let pc = MaterialPushConstants::from_material(&group.material);
+                    
+                    self.context.device().inner.cmd_push_constants(
+                        *command_buffer,
+                        self.pipeline.layout,
+                        vk::ShaderStageFlags::FRAGMENT,
+                        0,
+                        std::slice::from_raw_parts(
+                            &pc as *const _ as *const u8,
+                            std::mem::size_of::<MaterialPushConstants>(),
+                        ),
+                    );
+
+                    self.context.device().inner.cmd_bind_vertex_buffers(
+                        *command_buffer, 0, &[group.vertex_buffer.inner], &[0],
+                    );
+                    self.context.device().inner.cmd_bind_index_buffer(
+                        *command_buffer, group.index_buffer.inner, 0, vk::IndexType::UINT32,
+                    );
+                    self.context.device().inner.cmd_draw_indexed(
+                        *command_buffer, group.index_buffer.size as u32, 1, 0, 0, 0,
+                    );
+                }
+                
             }
 
             self.context.device().inner.cmd_end_render_pass(*command_buffer);

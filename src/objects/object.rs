@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use crate::math::{Vec3, Vec4};
+use crate::math::{Vec2, Vec3};
 
 use crate::materials::{Material, MaterialParser};
 use crate::renderer::Vertex;
@@ -92,46 +92,29 @@ impl Object {
         sum / (self.vertices.len() as f32)
     }
 
-    pub fn get_vertices_and_indices(&self) -> (Vec<Vertex>, Vec<u32>) {
+    pub fn get_group_vertices_and_indices(&self, group: &Group) -> (Vec<Vertex>, Vec<u32>) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
+        let mut index_map = std::collections::HashMap::new();
 
-        // First, create the vertices
-        for (i, v) in self.vertices.iter().enumerate() {
-            let normal = if i < self.normals.len() {
-                self.normals[i]
-            } else {
-                Vec3::new(1.0, 0.0, 0.0)
-            };
-
-            let color = Vec4::new(0.7, 0.7, 0.7, 1.0);
-
-            vertices.push(Vertex { position: *v, normal, color });
-        }
-
-        for group in &self.groups {
-            // Material color — pull dissolve for alpha
-            let base_color = if let Some(material_name) = &group.material {
-                if let Some(material) = self.materials.get(material_name) {
-                    let kd = material.kd.unwrap_or(Vec3::new(0.7, 0.7, 0.7));
-                    let alpha = material.dissolve.unwrap_or(1.0);
-                    Vec4::new(kd[0], kd[1], kd[2], alpha)
+        for face in &group.faces {
+            for fv in face {
+                let key = fv.vertex;
+                if let Some(&idx) = index_map.get(&key) {
+                    indices.push(idx);
                 } else {
-                    Vec4::new(0.7, 0.7, 0.7, 1.0)
-                }
-            } else {
-                Vec4::new(0.7, 0.7, 0.7, 1.0)
-            };
-
-            // Apply the material color to vertices referenced by this group
-            for face in &group.faces {
-                for face_vertex in face {
-                    // Update the vertex color
-                    if face_vertex.vertex < vertices.len() {
-                        vertices[face_vertex.vertex].color = base_color;
-                    }
-
-                    indices.push(face_vertex.vertex as u32);
+                    let idx = vertices.len() as u32;
+                    let normal = fv.normal
+                        .and_then(|n| self.normals.get(n))
+                        .copied()
+                        .unwrap_or(Vec3::new(0.0, 1.0, 0.0));
+                    vertices.push(Vertex {
+                        position: self.vertices[fv.vertex],
+                        normal,
+                        uv: Vec2::new(0.0, 1.0)
+                    });
+                    index_map.insert(key, idx);
+                    indices.push(idx);
                 }
             }
         }
@@ -202,18 +185,25 @@ impl ObjectParser {
             match parts[0] {
                 "v" => self.parse_vertex(&parts, &mut object)?,
                 "vn" => self.parse_normal(&parts, &mut object)?,
-                "g" => {
-                    // Save current group if it has faces
+                "g" | "o" => {
                     if !current_group.is_empty() {
                         object.groups.push(current_group);
                     }
-
                     current_group = self.parse_group(&parts, current_material.clone())?;
                 }
                 "f" => self.parse_face(&parts, &mut current_group, &object)?,
                 "mtllib" => self.parse_material_lib(&parts, &mut object)?,
                 "usemtl" => {
-                    current_material = self.parse_use_material(&parts)?;
+                    let new_material = self.parse_use_material(&parts)?;
+                    
+                    if !current_group.is_empty() {
+                        object.groups.push(current_group);
+                        
+                        let group_name = format!("{}_{}", parts[1], object.groups.len());
+                        current_group = Group::new(group_name);
+                    }
+                    
+                    current_material = new_material;
                     current_group.material = current_material.clone();
                 }
                 _ => continue,

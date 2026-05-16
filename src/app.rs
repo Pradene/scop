@@ -11,31 +11,41 @@ pub struct App {
 }
 
 impl ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             let window_attributes = Window::default_attributes()
                 .with_title("Scop")
                 .with_inner_size(PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT));
 
-            let window = event_loop
-                .create_window(window_attributes)
-                .expect("Failed to create window");
+            let window = match event_loop.create_window(window_attributes) {
+                Ok(w) => w,
+                Err(e) => {
+                    println!("Failed to create window: {:?}", e);
+                    return;
+                }
+            };
 
-            self.window = Some(window);
-            let window = self.window.as_ref().unwrap();
+            let context = match VkContext::new(&window) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    println!("Failed to create Vulkan context: {:?}", e);
+                    return;
+                }
+            };
 
-            let context = VkContext::new(window).unwrap();
-            match Renderer::new(window, context) {
+            match Renderer::new(&window, context) {
                 Ok(renderer) => {
                     self.renderer = Some(renderer);
                     println!("Vulkan renderer initialized successfully.");
+                    
+                    self.window = Some(window);
                 }
                 Err(e) => {
                     println!("Failed to create Vulkan renderer: {:?}", e);
                 }
             }
         }
-    }
+    }   
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
@@ -44,31 +54,28 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
-                if let Some(renderer) = &mut self.renderer {
-                    let _ = renderer.draw(self.window.as_ref().unwrap(), &self.scene);
+                if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
+                    let _ = renderer.draw(window, &self.scene);
+                    window.request_redraw();
                 }
-
-                self.window.as_ref().unwrap().request_redraw();
             }
 
             WindowEvent::Resized(_) => {
-                if let Some(window) = &self.window {
+                if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
                     let (width, height): (u32, u32) = window.inner_size().into();
                     self.scene.resize(width, height);
-                    if let Some(renderer) = &mut self.renderer {
-                        renderer.resize(width, height).unwrap();
+                    
+                    if let Err(e) = renderer.resize(width, height) {
+                        println!("Failed to handle swapchain resize: {:?}", e);
                     }
                 }
             }
 
-            WindowEvent::KeyboardInput {
-                device_id: _,
-                event,
-                is_synthetic: _,
-            } => match event.physical_key {
-                PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
-                _ => {}
-            },
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key {
+                    event_loop.exit();
+                }
+            }
 
             _ => (),
         }

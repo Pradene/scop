@@ -1,18 +1,9 @@
 use crate::camera::Camera;
-use crate::math::Mat4;
 use crate::objects::Object;
-
-pub type ObjectId = usize;
-
-pub struct SceneObject {
-    pub id: ObjectId,
-    pub object: Object,
-    pub transform: Mat4,
-}
 
 pub struct Scene {
     pub camera: Camera,
-    pub objects: Vec<SceneObject>,
+    pub objects: Vec<Object>,
 }
 
 impl Scene {
@@ -24,11 +15,7 @@ impl Scene {
     }
 
     pub fn add(&mut self, object: Object) {
-        self.objects.push(SceneObject {
-            id: self.objects.len(),
-            object,
-            transform: Mat4::identity()
-        });
+        self.objects.push(object);
     }
 
     pub fn remove(&mut self, index: usize) {

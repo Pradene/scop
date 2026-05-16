@@ -3,6 +3,24 @@ use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign, I
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Vec2 {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Vec2 {
+    pub const ZERO:  Vec2 = Vec2 { x: 0.0, y: 0.0 };
+    pub const ONE:   Vec2 = Vec2 { x: 1.0, y: 1.0 };
+    pub const X:     Vec2 = Vec2 { x: 1.0, y: 0.0 };
+    pub const Y:     Vec2 = Vec2 { x: 0.0, y: 1.0 };
+    pub const Z:     Vec2 = Vec2 { x: 0.0, y: 0.0 };
+
+    #[inline] pub fn new(x: f32, y: f32) -> Self { Self { x, y } }
+    #[inline] pub fn splat(v: f32) -> Self { Self::new(v, v) }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Vec3 {
     pub x: f32,
     pub y: f32,

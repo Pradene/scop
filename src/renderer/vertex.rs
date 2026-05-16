@@ -1,11 +1,11 @@
 use ash::vk;
-use crate::math::{Vec3, Vec4};
+use crate::math::{Vec3, Vec2};
 
 #[derive(Clone, Copy)]
 pub struct Vertex {
     pub position: Vec3,
     pub normal: Vec3,
-    pub color: Vec4,
+    pub uv: Vec2,
 }
 
 impl Vertex {
@@ -32,13 +32,13 @@ impl Vertex {
             offset: std::mem::offset_of!(Vertex, normal) as u32,
         };
 
-        let color_attribute = vk::VertexInputAttributeDescription {
+        let uv_attribute = vk::VertexInputAttributeDescription {
             binding: 0,
             location: 2,
-            format: vk::Format::R32G32B32A32_SFLOAT,
-            offset: std::mem::offset_of!(Vertex, color) as u32,
+            format: vk::Format::R32G32_SFLOAT, // Note: R32G32 (2 floats)
+            offset: std::mem::offset_of!(Vertex, uv) as u32,
         };
 
-        return [position_attribute, normal_attribute, color_attribute];
+        return [position_attribute, normal_attribute, uv_attribute];
     }
 }

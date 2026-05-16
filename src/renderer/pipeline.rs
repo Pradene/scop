@@ -1,3 +1,5 @@
+use crate::materials::MaterialPushConstants;
+
 use super::{Vertex, VkDescriptorSetLayout, VkDevice, VkRenderPass, VkShaderModule};
 
 use ash::vk;
@@ -70,7 +72,7 @@ impl VkPipeline {
             polygon_mode: vk::PolygonMode::FILL,
             line_width: 1.,
             cull_mode: vk::CullModeFlags::NONE,
-            front_face: vk::FrontFace::COUNTER_CLOCKWISE,
+            front_face: vk::FrontFace::CLOCKWISE,
             depth_bias_enable: vk::FALSE,
             depth_bias_constant_factor: 0.,
             depth_bias_clamp: 0.,
@@ -104,7 +106,7 @@ impl VkPipeline {
                 | vk::ColorComponentFlags::G
                 | vk::ColorComponentFlags::B
                 | vk::ColorComponentFlags::A,
-            blend_enable: vk::FALSE,
+            blend_enable: vk::TRUE,
             src_color_blend_factor: vk::BlendFactor::ONE,
             dst_color_blend_factor: vk::BlendFactor::ZERO,
             color_blend_op: vk::BlendOp::ADD,
@@ -131,12 +133,18 @@ impl VkPipeline {
             ..Default::default()
         };
 
+        let push_constant_range = vk::PushConstantRange {
+            stage_flags: vk::ShaderStageFlags::FRAGMENT,
+            offset: 0,
+            size: std::mem::size_of::<MaterialPushConstants>() as u32,
+        };
+
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
             set_layout_count: 1,
             p_set_layouts: &descriptor_set_layout.inner,
-            push_constant_range_count: 0,
-            p_push_constant_ranges: std::ptr::null(),
+            push_constant_range_count: 1,
+            p_push_constant_ranges: &push_constant_range,
             ..Default::default()
         };
 

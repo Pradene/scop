@@ -1,4 +1,4 @@
-use ash::{khr, vk};
+use ash::vk;
 
 use super::{VkInstance, VkPhysicalDevice};
 

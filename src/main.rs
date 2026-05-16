@@ -11,7 +11,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 fn main() -> Result<(), String> {
     let event_loop = EventLoop::new().map_err(|e| format!("Failed to create event loop: {}", e))?;
     event_loop.set_control_flow(ControlFlow::Poll);
-    
+
     let camera = Camera::new(
         Vec3::Z * 200.,
         Vec3::Z * -1.,
