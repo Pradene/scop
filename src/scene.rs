@@ -34,4 +34,8 @@ impl Scene {
     pub fn remove(&mut self, index: usize) {
         self.objects.remove(index);
     }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.camera.resize(width, height);
+    }
 }

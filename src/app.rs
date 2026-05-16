@@ -50,8 +50,12 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::Resized(_) => {
-                if let Some(renderer) = &mut self.renderer {
-                    renderer.resize(&self.window.as_ref().unwrap()).unwrap();
+                if let Some(window) = &self.window {
+                    let (width, height): (u32, u32) = window.inner_size().into();
+                    self.scene.resize(width, height);
+                    if let Some(renderer) = &mut self.renderer {
+                        renderer.resize(width, height).unwrap();
+                    }
                 }
             }
 

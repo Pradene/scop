@@ -81,7 +81,8 @@ impl Renderer {
         let capabilities = support_details.capabilities;
         let surface_format = Renderer::choose_surface_format(&support_details.formats);
         let present_mode = Renderer::choose_present_mode(&support_details.present_modes);
-        let extent = Renderer::choose_extent(window, &support_details.capabilities);
+        let (width, height) = window.inner_size().into();
+        let extent = Renderer::choose_extent(&support_details.capabilities, width, height);
 
         let render_pass = VkRenderPass::new(
             &instance,
@@ -222,14 +223,16 @@ impl Renderer {
 
         let image_index = match acquire_result {
             Ok((index, suboptimal)) => {
+                let (width, height) = window.inner_size().into();
                 if suboptimal {
-                    self.resize(window)?;
+                    self.resize(width, height)?;
                     return Ok(());
                 }
                 index
             }
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                self.resize(window)?;
+                let (width, height) = window.inner_size().into();
+                self.resize(width, height)?;
                 return Ok(());
             }
             Err(e) => return Err(format!("Failed to acquire next image: {:?}", e)),
@@ -361,7 +364,7 @@ impl Renderer {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    pub fn resize(&mut self, window: &Window) -> Result<(), String> {
+    pub fn resize(&mut self, width:u32, height: u32) -> Result<(), String> {
         unsafe { let _ = self.device.inner.device_wait_idle(); }
 
         let support_details = query_swapchain_support(
@@ -374,7 +377,7 @@ impl Renderer {
             support_details.capabilities,
             Renderer::choose_surface_format(&support_details.formats),
             Renderer::choose_present_mode(&support_details.present_modes),
-            Renderer::choose_extent(window, &support_details.capabilities),
+            Renderer::choose_extent(&support_details.capabilities, width, height),
         )
     }
 
@@ -404,11 +407,10 @@ impl Renderer {
             .unwrap_or(vk::PresentModeKHR::FIFO)
     }
 
-    fn choose_extent(window: &Window, capabilities: &vk::SurfaceCapabilitiesKHR) -> vk::Extent2D {
+    fn choose_extent(capabilities: &vk::SurfaceCapabilitiesKHR, width: u32, height: u32) -> vk::Extent2D {
         if capabilities.current_extent.width != u32::MAX {
             return capabilities.current_extent;
         }
-        let (width, height): (u32, u32) = window.inner_size().into();
         vk::Extent2D {
             width: width.clamp(
                 capabilities.min_image_extent.width,

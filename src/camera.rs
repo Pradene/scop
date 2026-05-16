@@ -38,8 +38,12 @@ impl Camera {
     }
 
     pub fn get_view_matrix(&self) -> Mat4 {
-        let view = Mat4::look_at(self.position, self.direction, Vec3::new(0., 1., 0.));
+        let view = Mat4::look_at(self.position, self.direction, Vec3::Y);
 
         return view;
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.ratio = width as f32 / height as f32;
     }
 }
