@@ -1,5 +1,5 @@
 use crate::camera::Camera;
-use lineal::Matrix;
+use crate::math::Mat4;
 use crate::objects::Object;
 
 pub type ObjectId = usize;
@@ -7,7 +7,7 @@ pub type ObjectId = usize;
 pub struct SceneObject {
     pub id: ObjectId,
     pub object: Object,
-    pub transform: Matrix<f32, 4, 4>,
+    pub transform: Mat4,
 }
 
 pub struct Scene {
@@ -27,7 +27,7 @@ impl Scene {
         self.objects.push(SceneObject {
             id: self.objects.len(),
             object,
-            transform: Matrix::identity()
+            transform: Mat4::identity()
         });
     }
 

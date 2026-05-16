@@ -4,7 +4,7 @@ use scop::camera::Camera;
 use scop::objects::Object;
 use scop::scene::Scene;
 
-use lineal::Vector;
+use scop::math::Vec3;
 
 use winit::event_loop::{ControlFlow, EventLoop};
 
@@ -15,8 +15,8 @@ fn main() -> Result<(), String> {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let camera = Camera::new(
-        Vector::new([0., 0., -200.]),
-        Vector::new([0., 0., 1.]),
+        Vec3::new(0., 0., -200.),
+        Vec3::new(0., 0., 1.),
         45.0f32.to_radians(),
         WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32,
         0.1,

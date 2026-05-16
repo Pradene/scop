@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 
-use lineal::Vector;
+use crate::math::Vec3;
 
 const BUFFER_SIZE: usize = 16;
 
@@ -25,9 +25,9 @@ pub enum MtlLine {
 #[derive(Debug, Default, Clone)]
 pub struct Material {
     pub name: String,
-    pub ka: Option<Vector<f32, 3>>,
-    pub kd: Option<Vector<f32, 3>>,
-    pub ks: Option<Vector<f32, 3>>,
+    pub ka: Option<Vec3>,
+    pub kd: Option<Vec3>,
+    pub ks: Option<Vec3>,
     pub ns: Option<f32>,
     pub ni: Option<f32>,
     pub dissolve: Option<f32>,
@@ -70,13 +70,13 @@ impl MaterialParser {
                                 current.name = name;
                             }
                             MtlLine::Ka(r, g, b) => {
-                                current.ka = Some(Vector::new([r, g, b]));
+                                current.ka = Some(Vec3::new(r, g, b));
                             }
                             MtlLine::Kd(r, g, b) => {
-                                current.kd = Some(Vector::new([r, g, b]));
+                                current.kd = Some(Vec3::new(r, g, b));
                             }
                             MtlLine::Ks(r, g, b) => {
-                                current.ks = Some(Vector::new([r, g, b]));
+                                current.ks = Some(Vec3::new(r, g, b));
                             }
                             MtlLine::Ns(val) => {
                                 current.ns = Some(val);

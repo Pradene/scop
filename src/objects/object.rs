@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use lineal::Vector;
+use crate::math::{Vec3, Vec4};
 
 use crate::materials::{Material, MaterialParser};
 use crate::renderer::Vertex;
@@ -41,9 +41,9 @@ impl Group {
 #[derive(Debug, Clone)]
 pub struct Object {
     pub groups: Vec<Group>,
-    pub vertices: Vec<Vector<f32, 3>>,
-    pub normals: Vec<Vector<f32, 3>>,
-    pub center: Vector<f32, 3>,
+    pub vertices: Vec<Vec3>,
+    pub normals: Vec<Vec3>,
+    pub center: Vec3,
     pub materials: HashMap<String, Material>,
 }
 
@@ -53,7 +53,7 @@ impl Object {
             groups: Vec::new(),
             vertices: Vec::new(),
             normals: Vec::new(),
-            center: Vector::new([0., 0., 0.]),
+            center: Vec3::new(0., 0., 0.),
             materials: HashMap::new(),
         }
     }
@@ -79,12 +79,12 @@ impl Object {
         triangles
     }
 
-    pub fn compute_center(&self) -> Vector<f32, 3> {
+    pub fn compute_center(&self) -> Vec3 {
         if self.vertices.is_empty() {
-            return Vector::from([0.0, 0.0, 0.0]);
+            return Vec3::new(0.0, 0.0, 0.0);
         }
 
-        let mut sum = Vector::from([0.0, 0.0, 0.0]);
+        let mut sum = Vec3::new(0.0, 0.0, 0.0);
         for vertex in &self.vertices {
             sum += *vertex;
         }
@@ -101,10 +101,10 @@ impl Object {
             let normal = if i < self.normals.len() {
                 self.normals[i]
             } else {
-                Vector::new([1.0, 0.0, 0.0])
+                Vec3::new(1.0, 0.0, 0.0)
             };
 
-            let color = Vector::new([0.7, 0.7, 0.7, 1.0]);
+            let color = Vec4::new(0.7, 0.7, 0.7, 1.0);
 
             vertices.push(Vertex { position: *v, normal, color });
         }
@@ -113,14 +113,14 @@ impl Object {
             // Material color — pull dissolve for alpha
             let base_color = if let Some(material_name) = &group.material {
                 if let Some(material) = self.materials.get(material_name) {
-                    let kd = material.kd.unwrap_or(Vector::new([0.7, 0.7, 0.7]));
+                    let kd = material.kd.unwrap_or(Vec3::new(0.7, 0.7, 0.7));
                     let alpha = material.dissolve.unwrap_or(1.0);
-                    Vector::new([kd[0], kd[1], kd[2], alpha])
+                    Vec4::new(kd[0], kd[1], kd[2], alpha)
                 } else {
-                    Vector::new([0.7, 0.7, 0.7, 1.0])
+                    Vec4::new(0.7, 0.7, 0.7, 1.0)
                 }
             } else {
-                Vector::new([0.7, 0.7, 0.7, 1.0])
+                Vec4::new(0.7, 0.7, 0.7, 1.0)
             };
 
             // Apply the material color to vertices referenced by this group
@@ -237,7 +237,7 @@ impl ObjectParser {
         let y = parts[2].parse::<f32>().map_err(|e| e.to_string())?;
         let z = parts[3].parse::<f32>().map_err(|e| e.to_string())?;
 
-        object.vertices.push(Vector::new([x, y, z]));
+        object.vertices.push(Vec3::new(x, y, z));
         Ok(())
     }
 
@@ -250,7 +250,7 @@ impl ObjectParser {
         let y = parts[2].parse::<f32>().map_err(|e| e.to_string())?;
         let z = parts[3].parse::<f32>().map_err(|e| e.to_string())?;
 
-        object.normals.push(Vector::new([x, y, z]));
+        object.normals.push(Vec3::new(x, y, z));
         Ok(())
     }
 

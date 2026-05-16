@@ -1,17 +1,17 @@
 use ash::vk;
-use lineal::{Matrix, Vector};
+use crate::math::{Mat4, Vec3, Vec4};
 
 pub struct UniformBufferObject {
-    pub model: Matrix<f32, 4, 4>,
-    pub view: Matrix<f32, 4, 4>,
-    pub proj: Matrix<f32, 4, 4>,
+    pub model: Mat4,
+    pub view: Mat4,
+    pub proj: Mat4,
 }
 
 #[derive(Clone, Copy)]
 pub struct Vertex {
-    pub position: Vector<f32, 3>,
-    pub normal: Vector<f32, 3>,
-    pub color: Vector<f32, 4>,
+    pub position: Vec3,
+    pub normal: Vec3,
+    pub color: Vec4,
 }
 
 impl Vertex {

@@ -1,9 +1,9 @@
-use lineal::{Matrix, Vector};
+use crate::math::{Mat4, Vec3};
 
 #[derive(Debug, Clone)]
 pub struct Camera {
-    pub position: Vector<f32, 3>,
-    pub direction: Vector<f32, 3>,
+    pub position: Vec3,
+    pub direction: Vec3,
 
     ratio: f32,
     far: f32,
@@ -13,8 +13,8 @@ pub struct Camera {
 
 impl Camera {
     pub fn new(
-        position: Vector<f32, 3>,
-        direction: Vector<f32, 3>,
+        position: Vec3,
+        direction: Vec3,
         fov: f32,
         ratio: f32,
         near: f32,
@@ -31,14 +31,14 @@ impl Camera {
         };
     }
 
-    pub fn projection_matrix(&self) -> Matrix<f32, 4, 4> {
-        let projection = Matrix::projection(self.fov, self.ratio, self.near, self.far);
+    pub fn get_projection_matrix(&self) -> Mat4 {
+        let projection = Mat4::projection(self.fov, self.ratio, self.near, self.far);
 
         return projection;
     }
 
-    pub fn view_matrix(&self) -> Matrix<f32, 4, 4> {
-        let view = Matrix::look_at(self.position, self.direction, Vector::new([0., 1., 0.]));
+    pub fn get_view_matrix(&self) -> Mat4 {
+        let view = Mat4::look_at(self.position, self.direction, Vec3::new(0., 1., 0.));
 
         return view;
     }

@@ -1,8 +1,7 @@
 use ash::vk;
 use std::sync::Arc;
 
-use lineal::{Matrix, Vector};
-
+use crate::math::{Mat4, Vec3};
 use crate::scene::{Scene, SceneObject};
 use crate::renderer::uniform_buffer::UniformBuffer;
 use crate::renderer::query_swapchain_support;
@@ -185,16 +184,16 @@ impl Renderer {
         // take center from first object if present, else zero
         let center = scene.objects.first()
             .map(|o| o.object.center)
-            .unwrap_or_else(|| Vector::new([0., 0., 0.]));
+            .unwrap_or_else(|| Vec3::ZERO);
 
-        let model = Matrix::identity()
-            .rotate(lineal::radian(90. * elapsed), Vector::new([0., 1., 0.]))
-            * Matrix::identity().translate(center * -1.);
+        let model = Mat4::identity()
+            .rotate((90.0 * elapsed).to_radians(), Vec3::Y)
+            * Mat4::identity().translate(center * -1.);
 
         let ubo = UniformBufferObject {
             model,
-            view: scene.camera.view_matrix(),
-            proj: scene.camera.projection_matrix(),
+            view: scene.camera.get_view_matrix(),
+            proj: scene.camera.get_projection_matrix(),
         };
 
         self.uniform_buffers[current_image as usize].write(&ubo);
