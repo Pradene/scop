@@ -381,7 +381,7 @@ impl Renderer {
     // ── helpers ───────────────────────────────────────────────────────────────
 
     pub fn resize(&mut self, width:u32, height: u32) -> Result<(), String> {
-        self.context.device().wait_idle();
+        self.wait_idle();
 
         let support_details = VkPhysicalDevice::query_swapchain_support(
             &self.context.physical_device.inner, &self.context.surface.loader, &self.context.surface.inner,
@@ -435,10 +435,14 @@ impl Renderer {
             ),
         }
     }
+
+    pub fn wait_idle(&self) {
+        self.context.device().wait_idle();
+    }
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
-        self.context.device().wait_idle();
+        self.wait_idle();
     }
 }

@@ -11,7 +11,7 @@ pub struct App {
 }
 
 impl ApplicationHandler for App {
-fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             let window_attributes = Window::default_attributes()
                 .with_title("Scop")
@@ -37,7 +37,6 @@ fn resumed(&mut self, event_loop: &ActiveEventLoop) {
                 Ok(renderer) => {
                     self.renderer = Some(renderer);
                     println!("Vulkan renderer initialized successfully.");
-                    
                     self.window = Some(window);
                 }
                 Err(e) => {
@@ -54,40 +53,59 @@ fn resumed(&mut self, event_loop: &ActiveEventLoop) {
             }
 
             WindowEvent::RedrawRequested => {
+                if event_loop.exiting() {
+                    return;
+                }
+
                 if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
                     let _ = renderer.draw(window, &self.scene);
-                    window.request_redraw();
+                    
+                    if !event_loop.exiting() {
+                        window.request_redraw();
+                    }
                 }
             }
 
             WindowEvent::Resized(_) => {
                 if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
                     let (width, height): (u32, u32) = window.inner_size().into();
-                    self.scene.resize(width, height);
                     
-                    if let Err(e) = renderer.resize(width, height) {
-                        println!("Failed to handle swapchain resize: {:?}", e);
+                    if width > 0 && height > 0 {
+                        self.scene.resize(width, height);
+                        if let Err(e) = renderer.resize(width, height) {
+                            println!("Failed to handle swapchain resize: {:?}", e);
+                        }
                     }
                 }
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key {
-                    event_loop.exit();
+                    if event.state.is_pressed() {
+                        event_loop.exit();
+                    }
                 }
             }
 
             _ => (),
         }
     }
+
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(renderer) = &self.renderer {
+            renderer.wait_idle();
+        }
+        self.renderer = None;
+        self.window = None;
+    }
 }
 
 impl App {
     pub fn new(scene: Scene) -> App {
-        return App {
+        App {
             window: None,
             renderer: None,
             scene,
-        };
+        }
     }
 }

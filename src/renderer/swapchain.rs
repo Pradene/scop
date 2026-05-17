@@ -29,6 +29,56 @@ impl VkSwapchain {
         present_mode: vk::PresentModeKHR,
         extent: vk::Extent2D,
     ) -> Result<VkSwapchain, String> {
+        Self::create_swapchain_internal(
+            context,
+            render_pass,
+            capabilities,
+            surface_format,
+            present_mode,
+            extent,
+            vk::SwapchainKHR::null(),
+        )
+    }
+
+    pub fn resize(
+        &mut self,
+        context: &VkContext,
+        render_pass: &VkRenderPass,
+        capabilities: vk::SurfaceCapabilitiesKHR,
+        surface_format: vk::SurfaceFormatKHR,
+        present_mode: vk::PresentModeKHR,
+        extent: vk::Extent2D,
+    ) -> Result<(), String> {
+        self.device.wait_idle();
+
+        let old_handle = self.inner;
+
+        let new_swapchain = Self::create_swapchain_internal(
+            context,
+            render_pass,
+            capabilities,
+            surface_format,
+            present_mode,
+            extent,
+            old_handle,
+        )?;
+
+        let mut old_swapchain = std::mem::replace(self, new_swapchain);
+        old_swapchain.inner = vk::SwapchainKHR::null();
+        old_swapchain.destroy();
+
+        Ok(())
+    }
+
+    fn create_swapchain_internal(
+        context: &VkContext,
+        render_pass: &VkRenderPass,
+        capabilities: vk::SurfaceCapabilitiesKHR,
+        surface_format: vk::SurfaceFormatKHR,
+        present_mode: vk::PresentModeKHR,
+        extent: vk::Extent2D,
+        old_swapchain: vk::SwapchainKHR,
+    ) -> Result<VkSwapchain, String> {
         let mut image_count = capabilities.min_image_count + 1;
         if capabilities.max_image_count > 0 && image_count > capabilities.max_image_count {
             image_count = capabilities.max_image_count;
@@ -48,15 +98,13 @@ impl VkSwapchain {
             composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
             present_mode,
             clipped: vk::TRUE,
+            old_swapchain,
             ..Default::default()
         };
 
         let graphics_family = context.graphics_family();
         let present_family = context.present_family();
-        let queue_family_indices = [
-            graphics_family,
-            present_family,
-        ];
+        let queue_family_indices = [graphics_family, present_family];
 
         if graphics_family != present_family {
             create_info.image_sharing_mode = vk::SharingMode::CONCURRENT;
@@ -80,7 +128,6 @@ impl VkSwapchain {
         };
 
         let image_views = VkSwapchain::create_image_views(&context.device(), &images, &image_format)?;
-
         let format = find_depth_format(&context.instance, &context.physical_device)?;
 
         let (depth_image, depth_image_memory) = create_image(
@@ -93,8 +140,7 @@ impl VkSwapchain {
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
 
-        let depth_image_view =
-            create_image_view(&context.device(), &depth_image, format, vk::ImageAspectFlags::DEPTH)?;
+        let depth_image_view = create_image_view(&context.device(), &depth_image, format, vk::ImageAspectFlags::DEPTH)?;
 
         let mut framebuffers = Vec::new();
         for image_view in &image_views {
@@ -121,24 +167,22 @@ impl VkSwapchain {
             framebuffers.push(framebuffer);
         }
 
-        return Ok(VkSwapchain {
-            device: context.device().clone(),
+        Ok(VkSwapchain {
+            device: context.device(),
             loader,
             inner,
             images,
             image_format,
             extent,
             image_views,
-
             framebuffers,
-
             depth_image,
             depth_image_memory,
             depth_image_view,
-        });
+        })
     }
 
-    fn create_image_views(
+        fn create_image_views(
         device: &VkDevice,
         images: &Vec<vk::Image>,
         format: &vk::Format,
@@ -212,61 +256,41 @@ impl VkSwapchain {
         };
     }
 
-    pub fn resize(
-        &mut self,
-        context: &VkContext,
-        render_pass: &VkRenderPass,
-        capabilities: vk::SurfaceCapabilitiesKHR,
-        surface_format: vk::SurfaceFormatKHR,
-        present_mode: vk::PresentModeKHR,
-        extent: vk::Extent2D,
-    ) -> Result<(), String> {
-        self.device.wait_idle();
-
-        self.destroy();
-
-        match VkSwapchain::new(
-            context,
-            render_pass,
-            capabilities,
-            surface_format,
-            present_mode,
-            extent,
-        ) {
-            Ok(swapchain) => *self = swapchain,
-            Err(e) => return Err(format!("Swapchain doesn't exist: {}", e)),
-        };
-
-        Ok(())
-    }
-
     pub fn destroy(&mut self) {
         unsafe {
-            for index in 0..self.framebuffers.len() {
-                self.device
-                    .inner
-                    .destroy_framebuffer(self.framebuffers[index], None);
+            for framebuffer in self.framebuffers.drain(..) {
+                self.device.inner.destroy_framebuffer(framebuffer, None);
             }
 
-            for index in 0..self.image_views.len() {
-                self.device
-                    .inner
-                    .destroy_image_view(self.image_views[index], None);
+            for image_view in self.image_views.drain(..) {
+                self.device.inner.destroy_image_view(image_view, None);
             }
 
-            self.device
-                .inner
-                .destroy_image_view(self.depth_image_view, None);
-            self.device.inner.destroy_image(self.depth_image, None);
-            self.device.inner.free_memory(self.depth_image_memory, None);
+            if self.depth_image_view != vk::ImageView::null() {
+                self.device.inner.destroy_image_view(self.depth_image_view, None);
+                self.depth_image_view = vk::ImageView::null();
+            }
 
-            self.loader.destroy_swapchain(self.inner, None);
+            if self.depth_image != vk::Image::null() {
+                self.device.inner.destroy_image(self.depth_image, None);
+                self.depth_image = vk::Image::null();
+            }
+
+            if self.depth_image_memory != vk::DeviceMemory::null() {
+                self.device.inner.free_memory(self.depth_image_memory, None);
+                self.depth_image_memory = vk::DeviceMemory::null();
+            }
+
+            if self.inner != vk::SwapchainKHR::null() {
+                self.loader.destroy_swapchain(self.inner, None);
+                self.inner = vk::SwapchainKHR::null();
+            }
         }
     }
 }
 
-// impl Drop for VkSwapchain {
-//     fn drop(&mut self) {
-//         self.destroy();
-//     }
-// }
+impl Drop for VkSwapchain {
+    fn drop(&mut self) {
+        self.destroy();
+    }
+}
