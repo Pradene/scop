@@ -4,13 +4,13 @@ use super::query_swapchain_support;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
     UniformBuffer, Uniforms, Vertex, VkBuffer, VkCommandPool, VkContext, VkDescriptorPool,
-    VkDescriptorSetLayout, VkFence, VkPipeline, VkRenderPass, VkSemaphore, VkSwapchain, VkQueue
+    VkDescriptorSetLayout, VkFence, VkPipeline, VkQueue, VkRenderPass, VkSemaphore, VkSwapchain,
 };
-use crate::materials::{Material, MaterialPushConstants};
-use crate::math::{Mat4, Vec3};
-use crate::objects::Object;
-use crate::scene::Scene;
 use crate::camera::Camera;
+use crate::material::{Material, MaterialPushConstants};
+use crate::math::{Mat4, Vec3};
+use crate::object::Object;
+use crate::scene::Scene;
 
 use winit::window::Window;
 
@@ -69,14 +69,8 @@ impl Renderer {
             }
         };
 
-        let graphics_queue = VkQueue::new(
-            context.device(),
-            context.graphics_family(),
-        );
-        let present_queue = VkQueue::new(
-            context.device(),
-            context.present_family(),
-        );
+        let graphics_queue = VkQueue::new(context.device(), context.graphics_family());
+        let present_queue = VkQueue::new(context.device(), context.present_family());
 
         let support_details = query_swapchain_support(
             &context.physical_device.inner,
@@ -279,10 +273,11 @@ impl Renderer {
             &self.in_flight_fences[self.frame as usize].inner,
         );
 
-        match self
-            .swapchain
-            .queue_present(&self.present_queue.inner, &signal_semaphores, image_index)
-        {
+        match self.swapchain.queue_present(
+            &self.present_queue.inner,
+            &signal_semaphores,
+            image_index,
+        ) {
             Ok(must_recreate) => {
                 if must_recreate {
                     let (width, height) = window.inner_size().into();

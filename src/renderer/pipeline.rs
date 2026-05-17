@@ -1,4 +1,4 @@
-use crate::materials::MaterialPushConstants;
+use crate::material::MaterialPushConstants;
 
 use super::{Vertex, VkDescriptorSetLayout, VkDevice, VkRenderPass, VkShaderModule};
 

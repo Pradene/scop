@@ -1,8 +1,9 @@
 pub mod app;
 pub mod camera;
-pub mod materials;
+pub mod material;
 pub mod math;
-pub mod objects;
+pub mod object;
+pub mod parser;
 pub mod renderer;
 pub mod scene;
 
