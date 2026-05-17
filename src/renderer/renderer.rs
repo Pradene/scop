@@ -266,7 +266,19 @@ impl Renderer {
             &self.in_flight_fences[self.frame as usize].inner,
         );
 
-        self.swapchain.present_queue(&self.present_queue, &signal_semaphores, image_index);
+        match self.swapchain.queue_present(&self.present_queue, &signal_semaphores, image_index) {
+            Ok(must_recreate) => {
+                if must_recreate {
+                    let (width, height) = window.inner_size().into();
+                    self.resize(width, height)?; 
+                }
+            }
+            Err(e) => {
+                println!("Critical presentation error: {}", e);
+                return Err(e);
+            }
+        }
+
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
 
         Ok(())

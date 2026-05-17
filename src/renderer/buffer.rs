@@ -23,7 +23,6 @@ impl<T: Copy> VkBuffer<T> {
         let device = context.device();
         let size = (std::mem::size_of::<T>() * data.len()) as u64;
 
-        // Create a staging buffer
         let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
         let staging_properties =
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
@@ -35,12 +34,11 @@ impl<T: Copy> VkBuffer<T> {
             &staging_properties,
         )?;
 
-        // Map memory and copy data
         let data_ptr = unsafe {
             device
                 .inner
                 .map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())
-                .unwrap()
+                .map_err(|e| format!("Failed to map staging buffer memory: {}", e))?
         };
 
         unsafe {
@@ -48,7 +46,6 @@ impl<T: Copy> VkBuffer<T> {
             device.inner.unmap_memory(staging_buffer_memory);
         }
 
-        // Create the target buffer
         let target_properties = vk::MemoryPropertyFlags::DEVICE_LOCAL;
         let (inner, memory) = VkBuffer::create_buffer(
             context,
@@ -57,17 +54,15 @@ impl<T: Copy> VkBuffer<T> {
             &target_properties,
         )?;
 
-        // Copy data from the staging buffer to the target buffer
         VkBuffer::copy_buffer(
             &device,
-            &command_pool,
+            command_pool,
             &queue.inner,
             &staging_buffer,
             &inner,
             &size,
-        );
+        )?;
 
-        // Cleanup staging buffer
         unsafe {
             device.inner.destroy_buffer(staging_buffer, None);
             device.inner.free_memory(staging_buffer_memory, None);
@@ -76,9 +71,9 @@ impl<T: Copy> VkBuffer<T> {
         Ok(VkBuffer {
             device,
             inner,
-            size: data.len() as u64,
+            size, 
             memory,
-            _type: PhantomData
+            _type: PhantomData,
         })
     }
 }
@@ -99,32 +94,40 @@ impl VkBuffer<()> {
             ..Default::default()
         };
 
-        let buffer = unsafe { device.inner.create_buffer(&create_info, None).unwrap() };
+        let buffer = unsafe {
+            device.inner
+                .create_buffer(&create_info, None)
+                .map_err(|e| format!("Failed to create buffer: {}", e))?
+        };
 
         let memory_requirements = unsafe { device.inner.get_buffer_memory_requirements(buffer) };
+
+        let memory_type_index = Self::find_memory_type(
+            context,
+            memory_requirements.memory_type_bits,
+            *properties,
+        )?;
 
         let allocate_info = vk::MemoryAllocateInfo {
             s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,
             allocation_size: memory_requirements.size,
-            memory_type_index: Self::find_memory_type(
-                context,
-                memory_requirements.memory_type_bits,
-                *properties,
-            )
-            .unwrap(),
-
+            memory_type_index,
             ..Default::default()
         };
 
-        let buffer_memory = unsafe { device.inner.allocate_memory(&allocate_info, None).unwrap() };
-        let _ = unsafe {
-            device
-                .inner
+        let buffer_memory = unsafe {
+            device.inner
+                .allocate_memory(&allocate_info, None)
+                .map_err(|e| format!("Failed to allocate buffer memory: {}", e))?
+        };
+        
+        unsafe {
+            device.inner
                 .bind_buffer_memory(buffer, buffer_memory, 0)
-                .unwrap()
+                .map_err(|e| format!("Failed to bind buffer memory: {}", e))?
         };
 
-        return Ok((buffer, buffer_memory));
+        Ok((buffer, buffer_memory))
     }
 
     fn copy_buffer(
@@ -134,7 +137,7 @@ impl VkBuffer<()> {
         src: &vk::Buffer,
         dst: &vk::Buffer,
         size: &vk::DeviceSize,
-    ) {
+    ) -> Result<(), String> {
         let allocate_info = vk::CommandBufferAllocateInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
             level: vk::CommandBufferLevel::PRIMARY,
@@ -143,13 +146,16 @@ impl VkBuffer<()> {
             ..Default::default()
         };
 
-        let command_buffer = unsafe {
-            device
-                .inner
+        let mut buffers = unsafe {
+            device.inner
                 .allocate_command_buffers(&allocate_info)
-                .unwrap()
-                .remove(0)
+                .map_err(|e| format!("Failed to allocate staging command buffer: {}", e))?
         };
+        
+        if buffers.is_empty() {
+            return Err("Allocation call succeeded but returned no command buffers".to_string());
+        }
+        let command_buffer = buffers.remove(0);
 
         let begin_info = vk::CommandBufferBeginInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
@@ -157,11 +163,10 @@ impl VkBuffer<()> {
             ..Default::default()
         };
 
-        let _ = unsafe {
-            device
-                .inner
+        unsafe {
+            device.inner
                 .begin_command_buffer(command_buffer, &begin_info)
-                .unwrap()
+                .map_err(|e| format!("Failed to begin recording command buffer: {}", e))?
         };
 
         let copy_region = vk::BufferCopy {
@@ -171,11 +176,12 @@ impl VkBuffer<()> {
         };
 
         unsafe {
-            device
-                .inner
-                .cmd_copy_buffer(command_buffer, *src, *dst, &[copy_region])
+            device.inner.cmd_copy_buffer(command_buffer, *src, *dst, &[copy_region]);
+            
+            device.inner
+                .end_command_buffer(command_buffer)
+                .map_err(|e| format!("Failed to end command buffer recording: {}", e))?;
         };
-        unsafe { device.inner.end_command_buffer(command_buffer).unwrap() };
 
         let submit_info = vk::SubmitInfo {
             s_type: vk::StructureType::SUBMIT_INFO,
@@ -185,18 +191,18 @@ impl VkBuffer<()> {
         };
 
         unsafe {
-            device
-                .inner
+            device.inner
                 .queue_submit(*queue, &[submit_info], vk::Fence::null())
-                .unwrap()
+                .map_err(|e| format!("Failed to submit copy queue commands: {}", e))?;
+
+            device.inner
+                .queue_wait_idle(*queue)
+                .map_err(|e| format!("Failed waiting for queue idle on copy: {}", e))?;
+
+            device.inner.free_command_buffers(command_pool.inner, &[command_buffer]);
         };
 
-        unsafe { device.inner.queue_wait_idle(*queue).unwrap() };
-        unsafe {
-            device
-                .inner
-                .free_command_buffers(command_pool.inner, &[command_buffer]);
-        };
+        Ok(())
     }
 
     pub fn find_memory_type(
@@ -219,7 +225,7 @@ impl VkBuffer<()> {
             }
         }
 
-        return Err("Failed to find suitable memory type".to_string());
+        Err("Failed to find suitable memory type for requirements".to_string())
     }
 }
 

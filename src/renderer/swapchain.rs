@@ -1,7 +1,8 @@
 use ash::{khr, vk};
 use std::sync::Arc;
 
-use super::{create_image, create_image_view, find_depth_format};
+use crate::renderer::{VkImage, VkImageView, find_depth_format};
+
 use super::{VkDevice, VkQueue, VkRenderPass, VkContext};
 
 pub struct VkSwapchain {
@@ -12,12 +13,9 @@ pub struct VkSwapchain {
     pub image_format: vk::Format,
     pub extent: vk::Extent2D,
     pub image_views: Vec<vk::ImageView>,
-
     pub framebuffers: Vec<vk::Framebuffer>,
-
-    pub depth_image: vk::Image,
-    pub depth_image_view: vk::ImageView,
-    pub depth_image_memory: vk::DeviceMemory,
+    pub depth_image: VkImage,
+    pub depth_view: VkImageView,
 }
 
 impl VkSwapchain {
@@ -29,7 +27,7 @@ impl VkSwapchain {
         present_mode: vk::PresentModeKHR,
         extent: vk::Extent2D,
     ) -> Result<VkSwapchain, String> {
-        Self::create_swapchain_internal(
+        Self::swapchain_create(
             context,
             render_pass,
             capabilities,
@@ -53,7 +51,7 @@ impl VkSwapchain {
 
         let old_handle = self.inner;
 
-        let new_swapchain = Self::create_swapchain_internal(
+        let new_swapchain = Self::swapchain_create(
             context,
             render_pass,
             capabilities,
@@ -63,14 +61,13 @@ impl VkSwapchain {
             old_handle,
         )?;
 
-        let mut old_swapchain = std::mem::replace(self, new_swapchain);
-        old_swapchain.inner = vk::SwapchainKHR::null();
-        old_swapchain.destroy();
+        let mut old = std::mem::replace(self, new_swapchain);
+        old.inner = vk::SwapchainKHR::null();
 
         Ok(())
     }
 
-    fn create_swapchain_internal(
+    fn swapchain_create(
         context: &VkContext,
         render_pass: &VkRenderPass,
         capabilities: vk::SurfaceCapabilitiesKHR,
@@ -127,45 +124,48 @@ impl VkSwapchain {
                 .map_err(|e| format!("Failed to get swapchain images: {}", e))?
         };
 
-        let image_views = VkSwapchain::create_image_views(&context.device(), &images, &image_format)?;
-        let format = find_depth_format(&context.instance, &context.physical_device)?;
+        let image_views = Self::create_image_views(&context.device(), &images, image_format)?;
 
-        let (depth_image, depth_image_memory) = create_image(
+        let depth_format = find_depth_format(&context.instance, &context.physical_device)?;
+        let depth_image = VkImage::new(
             context,
             extent.width,
             extent.height,
-            format,
+            depth_format,
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            vk::ImageAspectFlags::DEPTH
         )?;
 
-        let depth_image_view = create_image_view(&context.device(), &depth_image, format, vk::ImageAspectFlags::DEPTH)?;
+        let depth_view = VkImageView::new(
+            context.device(),
+            depth_image.inner,
+            depth_format,
+            vk::ImageAspectFlags::DEPTH,
+        )?;
 
-        let mut framebuffers = Vec::new();
-        for image_view in &image_views {
-            let attachments = [*image_view, depth_image_view];
-
-            let framebuffer_create_info = vk::FramebufferCreateInfo {
-                s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
-                render_pass: render_pass.inner,
-                attachment_count: attachments.len() as u32,
-                p_attachments: attachments.as_ptr(),
-                width: extent.width,
-                height: extent.height,
-                layers: 1,
-                ..Default::default()
-            };
-
-            let framebuffer = unsafe {
-                context.device()
-                    .inner
-                    .create_framebuffer(&framebuffer_create_info, None)
-                    .map_err(|e| format!("Failed to create framebuffer: {}", e))?
-            };
-
-            framebuffers.push(framebuffer);
-        }
+        let framebuffers = image_views
+            .iter()
+            .map(|&view| {
+                let attachments = [view, depth_view.inner];
+                let create_info = vk::FramebufferCreateInfo {
+                    s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
+                    render_pass: render_pass.inner,
+                    attachment_count: attachments.len() as u32,
+                    p_attachments: attachments.as_ptr(),
+                    width: extent.width,
+                    height: extent.height,
+                    layers: 1,
+                    ..Default::default()
+                };
+                unsafe {
+                    context.device().inner
+                        .create_framebuffer(&create_info, None)
+                        .map_err(|e| format!("Failed to create framebuffer: {}", e))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(VkSwapchain {
             device: context.device(),
@@ -177,65 +177,47 @@ impl VkSwapchain {
             image_views,
             framebuffers,
             depth_image,
-            depth_image_memory,
-            depth_image_view,
+            depth_view,
         })
     }
 
     fn create_image_views(
-        device: &VkDevice,
-        images: &Vec<vk::Image>,
-        format: &vk::Format,
+        device: &Arc<VkDevice>,
+        images: &[vk::Image],
+        format: vk::Format,
     ) -> Result<Vec<vk::ImageView>, String> {
-        let mut swapchain_image_views: Vec<vk::ImageView> = Vec::new();
-
-        for image in images {
-            let image_view =
-                create_image_view(device, image, *format, vk::ImageAspectFlags::COLOR)?;
-
-            swapchain_image_views.push(image_view);
-        }
-
-        return Ok(swapchain_image_views);
+        images
+            .iter()
+            .map(|&image| {
+                let create_info = vk::ImageViewCreateInfo {
+                    s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
+                    image,
+                    view_type: vk::ImageViewType::TYPE_2D,
+                    format,
+                    subresource_range: vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    },
+                    ..Default::default()
+                };
+                unsafe {
+                    device.inner
+                        .create_image_view(&create_info, None)
+                        .map_err(|e| format!("Failed to create image view: {}", e))
+                }
+            })
+            .collect()
     }
 
-    pub fn create_framebuffers(
-        &mut self,
-        device: &VkDevice,
-        render_pass: &vk::RenderPass,
-    ) -> Result<(), String> {
-        for swapchain_image_view in &self.image_views {
-            let attachments = [*swapchain_image_view, self.depth_image_view];
-
-            let framebuffer_create_info = vk::FramebufferCreateInfo {
-                s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
-                render_pass: *render_pass,
-                attachment_count: attachments.len() as u32,
-                p_attachments: attachments.as_ptr(),
-                width: self.extent.width,
-                height: self.extent.height,
-                layers: 1,
-                ..Default::default()
-            };
-
-            let framebuffer = unsafe {
-                device
-                    .inner
-                    .create_framebuffer(&framebuffer_create_info, None)
-                    .map_err(|e| format!("Failed to create framebuffer: {}", e))?
-            };
-            self.framebuffers.push(framebuffer);
-        }
-
-        return Ok(());
-    }
-
-    pub fn present_queue(
+    pub fn queue_present(
         &self,
         queue: &VkQueue,
         signal_semaphores: &[vk::Semaphore],
         image_index: u32,
-    ) {
+    ) -> Result<bool, String> {
         let swapchains = [self.inner];
 
         let present_info = vk::PresentInfoKHR {
@@ -249,11 +231,11 @@ impl VkSwapchain {
             ..Default::default()
         };
 
-        let _ = unsafe {
-            self.loader
-                .queue_present(queue.inner, &present_info)
-                .unwrap()
-        };
+        match unsafe { self.loader.queue_present(queue.inner, &present_info) } {
+            Ok(suboptimal) => Ok(suboptimal),
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => Ok(true),
+            Err(e) => Err(format!("Failed to present queue: {}", e)),
+        }
     }
 
     pub fn destroy(&mut self) {
@@ -261,26 +243,9 @@ impl VkSwapchain {
             for framebuffer in self.framebuffers.drain(..) {
                 self.device.inner.destroy_framebuffer(framebuffer, None);
             }
-
-            for image_view in self.image_views.drain(..) {
-                self.device.inner.destroy_image_view(image_view, None);
+            for view in self.image_views.drain(..) {
+                self.device.inner.destroy_image_view(view, None);
             }
-
-            if self.depth_image_view != vk::ImageView::null() {
-                self.device.inner.destroy_image_view(self.depth_image_view, None);
-                self.depth_image_view = vk::ImageView::null();
-            }
-
-            if self.depth_image != vk::Image::null() {
-                self.device.inner.destroy_image(self.depth_image, None);
-                self.depth_image = vk::Image::null();
-            }
-
-            if self.depth_image_memory != vk::DeviceMemory::null() {
-                self.device.inner.free_memory(self.depth_image_memory, None);
-                self.depth_image_memory = vk::DeviceMemory::null();
-            }
-
             if self.inner != vk::SwapchainKHR::null() {
                 self.loader.destroy_swapchain(self.inner, None);
                 self.inner = vk::SwapchainKHR::null();

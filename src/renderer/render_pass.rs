@@ -1,9 +1,8 @@
 use ash::vk;
 use std::sync::Arc;
 
-use crate::renderer::VkContext;
+use crate::renderer::{VkContext, find_depth_format};
 
-use super::find_depth_format;
 use super::{VkDevice};
 
 pub struct VkRenderPass {

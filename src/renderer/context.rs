@@ -1,12 +1,7 @@
 use std::sync::Arc;
 use winit::window::Window;
 
-use super::{
-    physical_device::VkPhysicalDevice,
-    device::VkDevice,
-    surface::VkSurface,
-    instance::VkInstance
-};
+use super::{VkPhysicalDevice,VkDevice,VkSurface,VkInstance};
 
 pub struct VkContext {
     device: Arc<VkDevice>,

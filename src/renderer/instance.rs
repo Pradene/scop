@@ -59,7 +59,6 @@ impl VkInstance {
             return Err("Validation layers not supported".to_string());
         }
 
-        // Set up Vulkan application information
         let application_info = vk::ApplicationInfo {
             api_version: vk::API_VERSION_1_3,
             ..Default::default()
@@ -72,18 +71,16 @@ impl VkInstance {
         let extension_names = ash_window::enumerate_required_extensions(display_handle.as_raw())
             .map_err(|e| format!("Error with extension: {}", e))?;
 
-        let validation_layers: Vec<CString> = VALIDATION_LAYERS
+        let validation_layers_cstring: Vec<CString> = VALIDATION_LAYERS
             .iter()
-            .map(|&layer| CString::new(layer).unwrap())
+            .map(|&layer| CString::new(layer).unwrap_or_default())
             .collect();
 
-        // Get raw pointers to the CStrings
-        let validation_layers: Vec<*const i8> = validation_layers
+        let validation_layers: Vec<*const i8> = validation_layers_cstring
             .iter()
             .map(|layer| layer.as_ptr())
             .collect();
 
-        // Create Vulkan instance
         let mut create_info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
             pp_enabled_extension_names: extension_names.as_ptr(),
