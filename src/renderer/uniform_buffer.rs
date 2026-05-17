@@ -5,7 +5,6 @@ use std::sync::Arc;
 use super::{VkBuffer, VkContext, VkDevice};
 use crate::math::Mat4;
 
-
 pub struct Uniforms {
     pub model: Mat4,
     pub view: Mat4,
@@ -13,27 +12,25 @@ pub struct Uniforms {
 }
 
 pub struct UniformBuffer {
+    device: Arc<VkDevice>,
     pub buffer: vk::Buffer,
     pub memory: vk::DeviceMemory,
     pub mapped: *mut c_void,
-    device: Arc<VkDevice>,
 }
 
-impl UniformBuffer {
-    pub fn new(
-        context: &VkContext,
-    ) -> Result<UniformBuffer, String> {
-        let device = context.device();
-        let usage = vk::BufferUsageFlags::UNIFORM_BUFFER;
-        let properties =
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+unsafe impl Send for UniformBuffer {}
+unsafe impl Sync for UniformBuffer {}
 
+impl UniformBuffer {
+    pub fn new(context: &VkContext) -> Result<UniformBuffer, String> {
+        let device = context.device();
         let size = std::mem::size_of::<Uniforms>() as u64;
+
         let (buffer, memory) = VkBuffer::create_buffer(
             context,
             &size,
-            &usage,
-            &properties,
+            &vk::BufferUsageFlags::UNIFORM_BUFFER,
+            &(vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT),
         )?;
 
         let mapped = unsafe {
@@ -43,7 +40,7 @@ impl UniformBuffer {
                 .map_err(|e| format!("Failed to map uniform buffer memory: {}", e))?
         };
 
-        Ok(UniformBuffer { buffer, memory, mapped, device })
+        Ok(Self { device, buffer, memory, mapped })
     }
 
     pub fn write<T: Sized>(&self, data: &T) {

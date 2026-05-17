@@ -2,6 +2,7 @@ use ash::vk;
 use std::sync::Arc;
 use std::marker::PhantomData;
 
+use super::find_memory_type;
 use super::{VkCommandPool, VkContext, VkDevice, VkQueue};
 
 pub struct VkBuffer<T> {
@@ -102,7 +103,7 @@ impl VkBuffer<()> {
 
         let memory_requirements = unsafe { device.inner.get_buffer_memory_requirements(buffer) };
 
-        let memory_type_index = Self::find_memory_type(
+        let memory_type_index = find_memory_type(
             context,
             memory_requirements.memory_type_bits,
             *properties,
@@ -203,29 +204,6 @@ impl VkBuffer<()> {
         };
 
         Ok(())
-    }
-
-    pub fn find_memory_type(
-        context: &VkContext,
-        type_filter: u32,
-        properties: vk::MemoryPropertyFlags,
-    ) -> Result<u32, String> {
-        let memory_properties = unsafe {
-            context.instance
-                .inner
-                .get_physical_device_memory_properties(context.physical_device.inner)
-        };
-
-        for index in 0..memory_properties.memory_type_count {
-            if (type_filter & (1 << index) != 0)
-                && ((memory_properties.memory_types[index as usize].property_flags & properties)
-                    == properties)
-            {
-                return Ok(index);
-            }
-        }
-
-        Err("Failed to find suitable memory type for requirements".to_string())
     }
 }
 

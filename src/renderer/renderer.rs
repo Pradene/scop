@@ -353,43 +353,11 @@ impl Renderer {
             // Two rendering for transparent object
             // Draw back -> front
             device.inner.cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::FRONT);
-
-            for mesh in &self.meshes {
-                for group in &mesh.groups {
-                    let pc = MaterialPushConstants::from_material(&group.material);
-                    device.inner.cmd_push_constants(
-                        *command_buffer,
-                        self.pipeline.layout,
-                        vk::ShaderStageFlags::FRAGMENT,
-                        0,
-                        std::slice::from_raw_parts(&pc as *const _ as *const u8, std::mem::size_of::<MaterialPushConstants>()),
-                    );
-
-                    device.inner.cmd_bind_vertex_buffers(*command_buffer, 0, &[group.vertex_buffer.inner], &[0]);
-                    device.inner.cmd_bind_index_buffer(*command_buffer, group.index_buffer.inner, 0, vk::IndexType::UINT32);
-                    device.inner.cmd_draw_indexed(*command_buffer, group.index_buffer.size as u32, 1, 0, 0, 0);
-                }
-            }
-
+            self.draw_meshes(&device.inner, command_buffer);
+            
             device.inner.cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::BACK);
-
-            for mesh in &self.meshes {
-                for group in &mesh.groups {
-                    let pc = MaterialPushConstants::from_material(&group.material);
-                    device.inner.cmd_push_constants(
-                        *command_buffer,
-                        self.pipeline.layout,
-                        vk::ShaderStageFlags::FRAGMENT,
-                        0,
-                        std::slice::from_raw_parts(&pc as *const _ as *const u8, std::mem::size_of::<MaterialPushConstants>()),
-                    );
-
-                    device.inner.cmd_bind_vertex_buffers(*command_buffer, 0, &[group.vertex_buffer.inner], &[0]);
-                    device.inner.cmd_bind_index_buffer(*command_buffer, group.index_buffer.inner, 0, vk::IndexType::UINT32);
-                    device.inner.cmd_draw_indexed(*command_buffer, group.index_buffer.size as u32, 1, 0, 0, 0);
-                }
-            }
-
+            self.draw_meshes(&device.inner, command_buffer);
+            
             device.inner.cmd_end_render_pass(*command_buffer);
 
             device.inner
@@ -398,6 +366,27 @@ impl Renderer {
         }
 
         Ok(())
+    }
+
+    fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer) {
+        for mesh in &self.meshes {
+            for group in &mesh.groups {
+                let pc = MaterialPushConstants::from_material(&group.material);
+                unsafe {
+                    device.cmd_push_constants(
+                        *cmd,
+                        self.pipeline.layout,
+                        vk::ShaderStageFlags::FRAGMENT,
+                        0,
+                        std::slice::from_raw_parts(&pc as *const _ as *const u8, std::mem::size_of::<MaterialPushConstants>()),
+                    );
+
+                    device.cmd_bind_vertex_buffers(*cmd, 0, &[group.vertex_buffer.inner], &[0]);
+                    device.cmd_bind_index_buffer(*cmd, group.index_buffer.inner, 0, vk::IndexType::UINT32);
+                    device.cmd_draw_indexed(*cmd, group.index_buffer.size as u32, 1, 0, 0, 0);
+                }
+            }
+        }
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -429,8 +418,7 @@ impl Renderer {
 
     fn choose_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
         formats.iter()
-            .find(|f| f.format == vk::Format::B8G8R8A8_SRGB
-                   && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
+            .find(|f| f.format == vk::Format::B8G8R8A8_SRGB && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
             .copied()
             .unwrap_or(formats[0])
     }

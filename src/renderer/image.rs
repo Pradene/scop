@@ -1,7 +1,8 @@
 use ash::vk;
 use std::sync::Arc;
 
-use super::{VkContext, VkDevice, VkBuffer};
+use super::find_memory_type;
+use super::{VkContext, VkDevice};
 
 pub struct VkImageView {
     device: Arc<VkDevice>,
@@ -89,7 +90,7 @@ impl VkImage {
         };
 
         let memory_requirements = unsafe { device.inner.get_image_memory_requirements(inner) };
-        let memory_type = VkBuffer::find_memory_type(context, memory_requirements.memory_type_bits, properties)?;
+        let memory_type = find_memory_type(context, memory_requirements.memory_type_bits, properties)?;
 
         let allocate_info = vk::MemoryAllocateInfo {
             s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,

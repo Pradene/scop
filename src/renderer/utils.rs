@@ -1,6 +1,6 @@
 use ash::{khr, vk};
 
-use crate::renderer::{VkInstance, VkPhysicalDevice};
+use crate::renderer::{VkContext, VkInstance, VkPhysicalDevice};
 
 #[derive(Clone)]
 pub struct SwapChainSupportDetails {
@@ -56,4 +56,27 @@ pub fn find_depth_format(instance: &VkInstance, physical_device: &VkPhysicalDevi
         }
     }
     Err("Failed to find supported depth format".to_string())
+}
+
+pub fn find_memory_type(
+    context: &VkContext,
+    type_filter: u32,
+    properties: vk::MemoryPropertyFlags,
+) -> Result<u32, String> {
+    let memory_properties = unsafe {
+        context.instance
+            .inner
+            .get_physical_device_memory_properties(context.physical_device.inner)
+    };
+
+    for index in 0..memory_properties.memory_type_count {
+        if (type_filter & (1 << index) != 0)
+            && ((memory_properties.memory_types[index as usize].property_flags & properties)
+                == properties)
+        {
+            return Ok(index);
+        }
+    }
+
+    Err("Failed to find suitable memory type for requirements".to_string())
 }
