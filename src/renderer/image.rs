@@ -32,7 +32,8 @@ impl VkImageView {
         };
 
         let inner = unsafe {
-            device.inner
+            device
+                .inner
                 .create_image_view(&create_info, None)
                 .map_err(|e| format!("Failed to create image view: {}", e))?
         };
@@ -43,7 +44,9 @@ impl VkImageView {
 
 impl Drop for VkImageView {
     fn drop(&mut self) {
-        unsafe { self.device.inner.destroy_image_view(self.inner, None); }
+        unsafe {
+            self.device.inner.destroy_image_view(self.inner, None);
+        }
     }
 }
 
@@ -71,7 +74,11 @@ impl VkImage {
         let create_info = vk::ImageCreateInfo {
             s_type: vk::StructureType::IMAGE_CREATE_INFO,
             image_type: vk::ImageType::TYPE_2D,
-            extent: vk::Extent3D { width, height, depth: 1 },
+            extent: vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            },
             mip_levels: 1,
             array_layers: 1,
             format,
@@ -84,13 +91,15 @@ impl VkImage {
         };
 
         let inner = unsafe {
-            device.inner
+            device
+                .inner
                 .create_image(&create_info, None)
                 .map_err(|e| format!("Failed to create image: {}", e))?
         };
 
         let memory_requirements = unsafe { device.inner.get_image_memory_requirements(inner) };
-        let memory_type = find_memory_type(context, memory_requirements.memory_type_bits, properties)?;
+        let memory_type =
+            find_memory_type(context, memory_requirements.memory_type_bits, properties)?;
 
         let allocate_info = vk::MemoryAllocateInfo {
             s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,
@@ -100,13 +109,15 @@ impl VkImage {
         };
 
         let memory = unsafe {
-            device.inner
+            device
+                .inner
                 .allocate_memory(&allocate_info, None)
                 .map_err(|e| format!("Failed to allocate image memory: {}", e))?
         };
 
         unsafe {
-            device.inner
+            device
+                .inner
                 .bind_image_memory(inner, memory, 0)
                 .map_err(|e| format!("Failed to bind memory to image: {}", e))?
         };
@@ -127,7 +138,8 @@ impl VkImage {
         };
 
         let view = unsafe {
-            device.inner
+            device
+                .inner
                 .create_image_view(&view_create_info, None)
                 .map_err(|e| format!("Failed to create image view: {}", e))?
         };

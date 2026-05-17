@@ -3,8 +3,8 @@ use crate::math::{Mat4, Vec3};
 #[derive(Debug, Clone)]
 pub struct Camera {
     pub position: Vec3,
-    pub yaw: f32,   // horizontal look angle (radians)
-    pub pitch: f32, // vertical look angle (radians)
+    pub yaw: f32,
+    pub pitch: f32,
 
     pub move_speed: f32,
     pub look_speed: f32,
@@ -17,19 +17,12 @@ pub struct Camera {
 
 impl Camera {
     const MIN_PITCH: f32 = -std::f32::consts::FRAC_PI_2 + 0.01;
-    const MAX_PITCH: f32 =  std::f32::consts::FRAC_PI_2 - 0.01;
+    const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.01;
 
-    pub fn new(
-        position: Vec3,
-        target: Vec3,
-        fov: f32,
-        ratio: f32,
-        near: f32,
-        far: f32,
-    ) -> Self {
+    pub fn new(position: Vec3, target: Vec3, fov: f32, ratio: f32, near: f32, far: f32) -> Self {
         let dir = (target - position).normalize();
 
-        let yaw   = dir.x.atan2(dir.z);
+        let yaw = dir.x.atan2(dir.z);
         let pitch = dir.y.asin().clamp(Self::MIN_PITCH, Self::MAX_PITCH);
 
         Self {
@@ -66,8 +59,9 @@ impl Camera {
     }
 
     pub fn look(&mut self, delta_x: f32, delta_y: f32) {
-        self.yaw  -= delta_x * self.look_speed;
-        self.pitch = (self.pitch + delta_y * self.look_speed).clamp(Self::MIN_PITCH, Self::MAX_PITCH);
+        self.yaw -= delta_x * self.look_speed;
+        self.pitch =
+            (self.pitch + delta_y * self.look_speed).clamp(Self::MIN_PITCH, Self::MAX_PITCH);
     }
 
     pub fn move_forward(&mut self, amount: f32) {

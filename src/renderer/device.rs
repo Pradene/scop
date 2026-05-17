@@ -62,7 +62,9 @@ impl VkDevice {
     }
 
     pub fn wait_idle(&self) {
-        unsafe { let _ = self.inner.device_wait_idle(); }
+        unsafe {
+            let _ = self.inner.device_wait_idle();
+        }
     }
 }
 

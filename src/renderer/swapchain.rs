@@ -1,9 +1,8 @@
 use ash::{khr, vk};
 use std::sync::Arc;
 
-use crate::renderer::{VkImage, VkImageView, find_depth_format};
-
-use super::{VkDevice, VkQueue, VkRenderPass, VkContext};
+use super::find_depth_format;
+use super::{VkContext, VkDevice, VkRenderPass, VkImage, VkImageView};
 
 pub struct VkSwapchain {
     device: Arc<VkDevice>,
@@ -135,7 +134,7 @@ impl VkSwapchain {
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            vk::ImageAspectFlags::DEPTH
+            vk::ImageAspectFlags::DEPTH,
         )?;
 
         let depth_view = VkImageView::new(
@@ -160,7 +159,9 @@ impl VkSwapchain {
                     ..Default::default()
                 };
                 unsafe {
-                    context.device().inner
+                    context
+                        .device()
+                        .inner
                         .create_framebuffer(&create_info, None)
                         .map_err(|e| format!("Failed to create framebuffer: {}", e))
                 }
@@ -204,7 +205,8 @@ impl VkSwapchain {
                     ..Default::default()
                 };
                 unsafe {
-                    device.inner
+                    device
+                        .inner
                         .create_image_view(&create_info, None)
                         .map_err(|e| format!("Failed to create image view: {}", e))
                 }
@@ -214,7 +216,7 @@ impl VkSwapchain {
 
     pub fn queue_present(
         &self,
-        queue: &VkQueue,
+        queue: &vk::Queue,
         signal_semaphores: &[vk::Semaphore],
         image_index: u32,
     ) -> Result<bool, String> {
@@ -231,7 +233,7 @@ impl VkSwapchain {
             ..Default::default()
         };
 
-        match unsafe { self.loader.queue_present(queue.inner, &present_info) } {
+        match unsafe { self.loader.queue_present(*queue, &present_info) } {
             Ok(suboptimal) => Ok(suboptimal),
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => Ok(true),
             Err(e) => Err(format!("Failed to present queue: {}", e)),

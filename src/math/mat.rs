@@ -1,6 +1,6 @@
-use std::fmt;
-use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign};
 use crate::math::{Vec3, Vec4};
+use std::fmt;
+use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
 // ─────────────────────────────────────────────
 //  Mat4  (column-major, 4 × Vec4 columns)
@@ -14,10 +14,10 @@ use crate::math::{Vec3, Vec4};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Mat4 {
-    pub x_axis: Vec4,   // column 0
-    pub y_axis: Vec4,   // column 1
-    pub z_axis: Vec4,   // column 2
-    pub w_axis: Vec4,   // column 3
+    pub x_axis: Vec4, // column 0
+    pub y_axis: Vec4, // column 1
+    pub z_axis: Vec4, // column 2
+    pub w_axis: Vec4, // column 3
 }
 
 // ── Constructors ─────────────────────────────
@@ -26,7 +26,12 @@ impl Mat4 {
     /// Build from four *column* vectors.
     #[inline]
     pub fn from_cols(x: Vec4, y: Vec4, z: Vec4, w: Vec4) -> Self {
-        Self { x_axis: x, y_axis: y, z_axis: z, w_axis: w }
+        Self {
+            x_axis: x,
+            y_axis: y,
+            z_axis: z,
+            w_axis: w,
+        }
     }
 
     /// Build from a column-major array of arrays: `cols[col][row]`.
@@ -95,10 +100,30 @@ impl Mat4 {
 impl Mat4 {
     pub fn transpose(&self) -> Self {
         Self::from_cols_array([
-            [self.get(0,0), self.get(1,0), self.get(2,0), self.get(3,0)],
-            [self.get(0,1), self.get(1,1), self.get(2,1), self.get(3,1)],
-            [self.get(0,2), self.get(1,2), self.get(2,2), self.get(3,2)],
-            [self.get(0,3), self.get(1,3), self.get(2,3), self.get(3,3)],
+            [
+                self.get(0, 0),
+                self.get(1, 0),
+                self.get(2, 0),
+                self.get(3, 0),
+            ],
+            [
+                self.get(0, 1),
+                self.get(1, 1),
+                self.get(2, 1),
+                self.get(3, 1),
+            ],
+            [
+                self.get(0, 2),
+                self.get(1, 2),
+                self.get(2, 2),
+                self.get(3, 2),
+            ],
+            [
+                self.get(0, 3),
+                self.get(1, 3),
+                self.get(2, 3),
+                self.get(3, 3),
+            ],
         ])
     }
 
@@ -118,24 +143,24 @@ impl Mat4 {
         let u = r.cross(f);
 
         Self::from_cols(
-            Vec4::new( r.x,  u.x, -f.x, 0.),
-            Vec4::new( r.y,  u.y, -f.y, 0.),
-            Vec4::new( r.z,  u.z, -f.z, 0.),
+            Vec4::new(r.x, u.x, -f.x, 0.),
+            Vec4::new(r.y, u.y, -f.y, 0.),
+            Vec4::new(r.z, u.z, -f.z, 0.),
             Vec4::new(-r.dot(position), -u.dot(position), f.dot(position), 1.),
         )
     }
 
     /// Perspective projection (right-handed, depth −1..1 / OpenGL convention).
     pub fn projection(fov: f32, ratio: f32, near: f32, far: f32) -> Self {
-        let scale        = 1. / (fov * 0.5).tan();
-        let range        = near - far;
+        let scale = 1. / (fov * 0.5).tan();
+        let range = near - far;
         let two_near_far = 2. * near * far;
 
         Self::from_cols(
-            Vec4::new(scale / ratio, 0.,     0.,                    0.),
-            Vec4::new(0.,            -scale, 0.,                    0.),
-            Vec4::new(0.,            0.,     (far + near) / range, -1.),
-            Vec4::new(0.,            0.,     two_near_far / range,   0.),
+            Vec4::new(scale / ratio, 0., 0., 0.),
+            Vec4::new(0., -scale, 0., 0.),
+            Vec4::new(0., 0., (far + near) / range, -1.),
+            Vec4::new(0., 0., two_near_far / range, 0.),
         )
     }
 }
@@ -163,10 +188,10 @@ impl Mat4 {
         let mc = 1. - c;
 
         let rotation = Self::from_cols(
-            Vec4::new(x*x*mc + c,   y*x*mc + z*s, z*x*mc - y*s, 0.),
-            Vec4::new(x*y*mc - z*s, y*y*mc + c,   z*y*mc + x*s, 0.),
-            Vec4::new(x*z*mc + y*s, y*z*mc - x*s, z*z*mc + c,   0.),
-            Vec4::new(0.,           0.,            0.,          1.),
+            Vec4::new(x * x * mc + c, y * x * mc + z * s, z * x * mc - y * s, 0.),
+            Vec4::new(x * y * mc - z * s, y * y * mc + c, z * y * mc + x * s, 0.),
+            Vec4::new(x * z * mc + y * s, y * z * mc - x * s, z * z * mc + c, 0.),
+            Vec4::new(0., 0., 0., 1.),
         );
         rotation * *self
     }
@@ -174,10 +199,10 @@ impl Mat4 {
     /// Returns `scale(s) * self`.
     pub fn scale(&self, s: Vec3) -> Self {
         let sc = Self::from_cols(
-            Vec4::new(s.x, 0.,  0.,  0.),
-            Vec4::new(0.,  s.y, 0.,  0.),
-            Vec4::new(0.,  0.,  s.z, 0.),
-            Vec4::new(0.,  0.,  0.,  1.),
+            Vec4::new(s.x, 0., 0., 0.),
+            Vec4::new(0., s.y, 0., 0.),
+            Vec4::new(0., 0., s.z, 0.),
+            Vec4::new(0., 0., 0., 1.),
         );
         sc * *self
     }
@@ -197,7 +222,9 @@ impl Add for Mat4 {
     }
 }
 impl AddAssign for Mat4 {
-    fn add_assign(&mut self, rhs: Self) { *self = *self + rhs; }
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
 }
 
 impl Sub for Mat4 {
@@ -212,7 +239,9 @@ impl Sub for Mat4 {
     }
 }
 impl SubAssign for Mat4 {
-    fn sub_assign(&mut self, rhs: Self) { *self = *self - rhs; }
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs;
+    }
 }
 
 impl Mul for Mat4 {
@@ -227,7 +256,9 @@ impl Mul for Mat4 {
     }
 }
 impl MulAssign for Mat4 {
-    fn mul_assign(&mut self, rhs: Self) { *self = *self * rhs; }
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = *self * rhs;
+    }
 }
 
 impl Mul<f32> for Mat4 {
@@ -242,12 +273,16 @@ impl Mul<f32> for Mat4 {
     }
 }
 impl MulAssign<f32> for Mat4 {
-    fn mul_assign(&mut self, rhs: f32) { *self = *self * rhs; }
+    fn mul_assign(&mut self, rhs: f32) {
+        *self = *self * rhs;
+    }
 }
 
 impl Mul<Vec4> for Mat4 {
     type Output = Vec4;
-    fn mul(self, rhs: Vec4) -> Vec4 { self.mul_vec4(rhs) }
+    fn mul(self, rhs: Vec4) -> Vec4 {
+        self.mul_vec4(rhs)
+    }
 }
 
 impl PartialEq for Mat4 {
@@ -274,10 +309,17 @@ impl fmt::Display for Mat4 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Print row by row for readability
         for row in 0..4 {
-            write!(f, "[ {:.4}  {:.4}  {:.4}  {:.4} ]",
-                self.get(0, row), self.get(1, row),
-                self.get(2, row), self.get(3, row))?;
-            if row < 3 { writeln!(f)?; }
+            write!(
+                f,
+                "[ {:.4}  {:.4}  {:.4}  {:.4} ]",
+                self.get(0, row),
+                self.get(1, row),
+                self.get(2, row),
+                self.get(3, row)
+            )?;
+            if row < 3 {
+                writeln!(f)?;
+            }
         }
         Ok(())
     }

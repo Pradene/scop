@@ -2,7 +2,8 @@ use ash::vk;
 use std::ffi::c_void;
 use std::sync::Arc;
 
-use super::{VkBuffer, VkContext, VkDevice};
+use super::create_buffer;
+use super::{VkContext, VkDevice};
 use crate::math::Mat4;
 
 pub struct Uniforms {
@@ -26,7 +27,7 @@ impl UniformBuffer {
         let device = context.device();
         let size = std::mem::size_of::<Uniforms>() as u64;
 
-        let (buffer, memory) = VkBuffer::create_buffer(
+        let (buffer, memory) = create_buffer(
             context,
             &size,
             &vk::BufferUsageFlags::UNIFORM_BUFFER,
@@ -40,7 +41,12 @@ impl UniformBuffer {
                 .map_err(|e| format!("Failed to map uniform buffer memory: {}", e))?
         };
 
-        Ok(Self { device, buffer, memory, mapped })
+        Ok(Self {
+            device,
+            buffer,
+            memory,
+            mapped,
+        })
     }
 
     pub fn write<T: Sized>(&self, data: &T) {

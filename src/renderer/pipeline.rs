@@ -124,7 +124,11 @@ impl VkPipeline {
             ..Default::default()
         };
 
-        let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR, vk::DynamicState::CULL_MODE];
+        let dynamic_states = vec![
+            vk::DynamicState::VIEWPORT,
+            vk::DynamicState::SCISSOR,
+            vk::DynamicState::CULL_MODE,
+        ];
         let dynamic_state = vk::PipelineDynamicStateCreateInfo {
             s_type: vk::StructureType::PIPELINE_DYNAMIC_STATE_CREATE_INFO,
             dynamic_state_count: dynamic_states.len() as u32,

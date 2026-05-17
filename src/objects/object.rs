@@ -104,14 +104,15 @@ impl Object {
                     indices.push(idx);
                 } else {
                     let idx = vertices.len() as u32;
-                    let normal = fv.normal
+                    let normal = fv
+                        .normal
                         .and_then(|n| self.normals.get(n))
                         .copied()
                         .unwrap_or(Vec3::new(0.0, 1.0, 0.0));
                     vertices.push(Vertex {
                         position: self.vertices[fv.vertex],
                         normal,
-                        uv: Vec2::new(0.0, 1.0)
+                        uv: Vec2::new(0.0, 1.0),
                     });
                     index_map.insert(key, idx);
                     indices.push(idx);
@@ -195,14 +196,14 @@ impl ObjectParser {
                 "mtllib" => self.parse_material_lib(&parts, &mut object)?,
                 "usemtl" => {
                     let new_material = self.parse_use_material(&parts)?;
-                    
+
                     if !current_group.is_empty() {
                         object.groups.push(current_group);
-                        
+
                         let group_name = format!("{}_{}", parts[1], object.groups.len());
                         current_group = Group::new(group_name);
                     }
-                    
+
                     current_material = new_material;
                     current_group.material = current_material.clone();
                 }

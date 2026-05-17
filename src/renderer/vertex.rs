@@ -1,5 +1,5 @@
+use crate::math::{Vec2, Vec3};
 use ash::vk;
-use crate::math::{Vec3, Vec2};
 
 #[derive(Clone, Copy)]
 pub struct Vertex {

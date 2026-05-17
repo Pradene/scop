@@ -1,16 +1,15 @@
 use ash::vk;
 
+use super::query_swapchain_support;
+use super::MAX_FRAMES_IN_FLIGHT;
+use super::{
+    UniformBuffer, Uniforms, Vertex, VkBuffer, VkCommandPool, VkContext, VkDescriptorPool,
+    VkDescriptorSetLayout, VkFence, VkPipeline, VkRenderPass, VkSemaphore, VkSwapchain, VkQueue
+};
 use crate::materials::{Material, MaterialPushConstants};
 use crate::math::{Mat4, Vec3};
 use crate::objects::Object;
-use super::{query_swapchain_support};
 use crate::scene::Scene;
-use super::MAX_FRAMES_IN_FLIGHT;
-use super::{
-    Uniforms, Vertex, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet,
-    VkDescriptorSetLayout, VkFence, VkPipeline, VkQueue,
-    VkRenderPass, VkSemaphore, VkSwapchain, VkContext, UniformBuffer
-};
 
 use winit::window::Window;
 
@@ -31,7 +30,7 @@ pub struct Renderer {
     pub in_flight_fences: Vec<VkFence>,
 
     // Descriptors
-    pub descriptor_sets: Vec<VkDescriptorSet>,
+    pub descriptor_sets: Vec<vk::DescriptorSet>,
     pub descriptor_pool: VkDescriptorPool,
     pub descriptor_set_layout: VkDescriptorSetLayout,
 
@@ -71,7 +70,11 @@ impl Renderer {
             context.present_family(),
         );
 
-        let support_details = query_swapchain_support(&context.physical_device.inner, &context.surface.loader, &context.surface.inner)?;
+        let support_details = query_swapchain_support(
+            &context.physical_device.inner,
+            &context.surface.loader,
+            &context.surface.inner,
+        )?;
 
         let capabilities = support_details.capabilities;
         let surface_format = Renderer::choose_surface_format(&support_details.formats);
@@ -79,14 +82,15 @@ impl Renderer {
         let (width, height) = window.inner_size().into();
         let extent = Renderer::choose_extent(&support_details.capabilities, width, height);
 
-        let render_pass = VkRenderPass::new(
-            &context,
-            surface_format.format,
-        )?;
+        let render_pass = VkRenderPass::new(&context, surface_format.format)?;
 
         let swapchain = VkSwapchain::new(
             &context,
-            &render_pass, capabilities, surface_format, present_mode, extent,
+            &render_pass,
+            capabilities,
+            surface_format,
+            present_mode,
+            extent,
         )?;
 
         let descriptor_set_layout = VkDescriptorSetLayout::new(context.device())?;
@@ -152,23 +156,37 @@ impl Renderer {
 
         for group in &object.groups {
             let (vertices, indices) = object.get_group_vertices_and_indices(group);
-            if indices.is_empty() { continue; }
+            if indices.is_empty() {
+                continue;
+            }
 
-            let material = group.material.as_ref()
+            let material = group
+                .material
+                .as_ref()
                 .and_then(|name| object.materials.get(name))
                 .cloned()
                 .unwrap_or_default();
 
             let vertex_buffer = VkBuffer::new(
-                &self.context, &self.graphics_queue, &self.command_pool, &vertices,
+                &self.context,
+                &self.graphics_queue,
+                &self.command_pool,
+                &vertices,
                 vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
             )?;
             let index_buffer = VkBuffer::new(
-                &self.context, &self.graphics_queue, &self.command_pool, &indices,
+                &self.context,
+                &self.graphics_queue,
+                &self.command_pool,
+                &indices,
                 vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
             )?;
 
-            groups.push(GpuGroup { vertex_buffer, index_buffer, material });
+            groups.push(GpuGroup {
+                vertex_buffer,
+                index_buffer,
+                material,
+            });
         }
 
         self.meshes.push(GpuMesh { groups });
@@ -181,12 +199,13 @@ impl Renderer {
         let elapsed = self.start.elapsed().as_secs_f32();
 
         // take center from first object if present, else zero
-        let center = scene.objects.first()
+        let center = scene
+            .objects
+            .first()
             .map(|o| o.center)
             .unwrap_or_else(|| Vec3::ZERO);
 
-        let model = Mat4::identity()
-            .rotate((90.0 * elapsed).to_radians(), Vec3::Y)
+        let model = Mat4::identity().rotate((90.0 * elapsed).to_radians(), Vec3::Y)
             * Mat4::identity().translate(center * -1.);
 
         let ubo = Uniforms {
@@ -203,11 +222,15 @@ impl Renderer {
         self.sync_meshes(scene)?;
 
         unsafe {
-            self.context.device().inner.wait_for_fences(
-                &[self.in_flight_fences[self.frame as usize].inner],
-                true,
-                u64::MAX,
-            ).map_err(|e| format!("Failed to wait for fence: {}", e))?;
+            self.context
+                .device()
+                .inner
+                .wait_for_fences(
+                    &[self.in_flight_fences[self.frame as usize].inner],
+                    true,
+                    u64::MAX,
+                )
+                .map_err(|e| format!("Failed to wait for fence: {}", e))?;
         }
 
         let acquire_result = unsafe {
@@ -239,38 +262,44 @@ impl Renderer {
         self.update_uniform_buffer(self.frame, scene);
 
         unsafe {
-            self.context.device().inner
+            self.context
+                .device()
+                .inner
                 .reset_fences(&[self.in_flight_fences[self.frame as usize].inner])
                 .map_err(|e| format!("Failed to reset fence: {}", e))?;
 
-            self.context.device().inner.reset_command_buffer(
-                self.command_pool.buffers[self.frame as usize].inner,
-                vk::CommandBufferResetFlags::empty(),
-            ).map_err(|e| format!("Failed to reset command buffer: {}", e))?;
+            self.context
+                .device()
+                .inner
+                .reset_command_buffer(
+                    self.command_pool.buffers[self.frame as usize],
+                    vk::CommandBufferResetFlags::empty(),
+                )
+                .map_err(|e| format!("Failed to reset command buffer: {}", e))?;
         }
 
-        self.record_command_buffer(
-            &self.command_pool.buffers[self.frame as usize].inner,
-            image_index,
-        )?;
+        self.record_command_buffer(&self.command_pool.buffers[self.frame as usize], image_index)?;
 
         let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].inner];
-        let wait_semaphores   = [self.image_available_semaphores[self.frame as usize].inner];
-        let wait_stages       = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let wait_semaphores = [self.image_available_semaphores[self.frame as usize].inner];
+        let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
         self.graphics_queue.submit(
-            &self.command_pool.buffers[self.frame as usize].inner,
+            &self.command_pool.buffers[self.frame as usize],
             &wait_semaphores,
             &signal_semaphores,
             &wait_stages,
             &self.in_flight_fences[self.frame as usize].inner,
         );
 
-        match self.swapchain.queue_present(&self.present_queue, &signal_semaphores, image_index) {
+        match self
+            .swapchain
+            .queue_present(&self.present_queue.inner, &signal_semaphores, image_index)
+        {
             Ok(must_recreate) => {
                 if must_recreate {
                     let (width, height) = window.inner_size().into();
-                    self.resize(width, height)?; 
+                    self.resize(width, height)?;
                 }
             }
             Err(e) => {
@@ -295,8 +324,17 @@ impl Renderer {
         };
 
         let clear_values = [
-            vk::ClearValue { color: vk::ClearColorValue { float32: [0., 0., 0., 1.] } },
-            vk::ClearValue { depth_stencil: vk::ClearDepthStencilValue { depth: 1., stencil: 0 } },
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0., 0., 0., 1.],
+                },
+            },
+            vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.,
+                    stencil: 0,
+                },
+            },
         ];
 
         let render_pass_info = vk::RenderPassBeginInfo {
@@ -313,10 +351,12 @@ impl Renderer {
         };
 
         let viewport = vk::Viewport {
-            x: 0., y: 0.,
+            x: 0.,
+            y: 0.,
             width: self.swapchain.extent.width as f32,
             height: self.swapchain.extent.height as f32,
-            min_depth: 0., max_depth: 1.,
+            min_depth: 0.,
+            max_depth: 1.,
         };
 
         let scissor = vk::Rect2D {
@@ -326,19 +366,26 @@ impl Renderer {
 
         unsafe {
             let device = self.context.device();
-            device.inner
+            device
+                .inner
                 .begin_command_buffer(*command_buffer, &begin_info)
                 .map_err(|e| format!("Failed to begin command buffer: {}", e))?;
 
             device.inner.cmd_begin_render_pass(
-                *command_buffer, &render_pass_info, vk::SubpassContents::INLINE,
+                *command_buffer,
+                &render_pass_info,
+                vk::SubpassContents::INLINE,
             );
 
             device.inner.cmd_bind_pipeline(
-                *command_buffer, vk::PipelineBindPoint::GRAPHICS, self.pipeline.inner,
+                *command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.inner,
             );
 
-            device.inner.cmd_set_viewport(*command_buffer, 0, &[viewport]);
+            device
+                .inner
+                .cmd_set_viewport(*command_buffer, 0, &[viewport]);
             device.inner.cmd_set_scissor(*command_buffer, 0, &[scissor]);
 
             device.inner.cmd_bind_descriptor_sets(
@@ -346,21 +393,26 @@ impl Renderer {
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline.layout,
                 0,
-                &[self.descriptor_sets[self.frame as usize].inner],
+                &[self.descriptor_sets[self.frame as usize]],
                 &[],
             );
 
             // Two rendering for transparent object
             // Draw back -> front
-            device.inner.cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::FRONT);
+            device
+                .inner
+                .cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::FRONT);
             self.draw_meshes(&device.inner, command_buffer);
-            
-            device.inner.cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::BACK);
+
+            device
+                .inner
+                .cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::BACK);
             self.draw_meshes(&device.inner, command_buffer);
-            
+
             device.inner.cmd_end_render_pass(*command_buffer);
 
-            device.inner
+            device
+                .inner
                 .end_command_buffer(*command_buffer)
                 .map_err(|e| format!("Failed to end command buffer: {}", e))?;
         }
@@ -378,11 +430,19 @@ impl Renderer {
                         self.pipeline.layout,
                         vk::ShaderStageFlags::FRAGMENT,
                         0,
-                        std::slice::from_raw_parts(&pc as *const _ as *const u8, std::mem::size_of::<MaterialPushConstants>()),
+                        std::slice::from_raw_parts(
+                            &pc as *const _ as *const u8,
+                            std::mem::size_of::<MaterialPushConstants>(),
+                        ),
                     );
 
                     device.cmd_bind_vertex_buffers(*cmd, 0, &[group.vertex_buffer.inner], &[0]);
-                    device.cmd_bind_index_buffer(*cmd, group.index_buffer.inner, 0, vk::IndexType::UINT32);
+                    device.cmd_bind_index_buffer(
+                        *cmd,
+                        group.index_buffer.inner,
+                        0,
+                        vk::IndexType::UINT32,
+                    );
                     device.cmd_draw_indexed(*cmd, group.index_buffer.size as u32, 1, 0, 0, 0);
                 }
             }
@@ -391,11 +451,13 @@ impl Renderer {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    pub fn resize(&mut self, width:u32, height: u32) -> Result<(), String> {
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), String> {
         self.wait_idle();
 
         let support_details = query_swapchain_support(
-            &self.context.physical_device.inner, &self.context.surface.loader, &self.context.surface.inner,
+            &self.context.physical_device.inner,
+            &self.context.surface.loader,
+            &self.context.surface.inner,
         )?;
 
         self.swapchain.resize(
@@ -408,29 +470,36 @@ impl Renderer {
         )
     }
 
-    fn create_uniform_buffers(
-        context: &VkContext,
-    ) -> Result<Vec<UniformBuffer>, String> {
+    fn create_uniform_buffers(context: &VkContext) -> Result<Vec<UniformBuffer>, String> {
         (0..MAX_FRAMES_IN_FLIGHT)
             .map(|_| UniformBuffer::new(context))
             .collect()
     }
 
     fn choose_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
-        formats.iter()
-            .find(|f| f.format == vk::Format::B8G8R8A8_SRGB && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
+        formats
+            .iter()
+            .find(|f| {
+                f.format == vk::Format::B8G8R8A8_SRGB
+                    && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+            })
             .copied()
             .unwrap_or(formats[0])
     }
 
     fn choose_present_mode(modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
-        modes.iter()
+        modes
+            .iter()
             .find(|&&m| m == vk::PresentModeKHR::MAILBOX)
             .copied()
             .unwrap_or(vk::PresentModeKHR::FIFO)
     }
 
-    fn choose_extent(capabilities: &vk::SurfaceCapabilitiesKHR, width: u32, height: u32) -> vk::Extent2D {
+    fn choose_extent(
+        capabilities: &vk::SurfaceCapabilitiesKHR,
+        width: u32,
+        height: u32,
+    ) -> vk::Extent2D {
         if capabilities.current_extent.width != u32::MAX {
             return capabilities.current_extent;
         }

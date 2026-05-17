@@ -1,9 +1,9 @@
 use ash::vk;
 use std::sync::Arc;
 
-use crate::renderer::{VkContext, find_depth_format};
+use crate::renderer::{find_depth_format, VkContext};
 
-use super::{VkDevice};
+use super::VkDevice;
 
 pub struct VkRenderPass {
     device: Arc<VkDevice>,
@@ -11,10 +11,7 @@ pub struct VkRenderPass {
 }
 
 impl VkRenderPass {
-    pub fn new(
-        context: &VkContext,
-        swapchain_format: vk::Format,
-    ) -> Result<VkRenderPass, String> {
+    pub fn new(context: &VkContext, swapchain_format: vk::Format) -> Result<VkRenderPass, String> {
         let color_attachment = vk::AttachmentDescription {
             format: swapchain_format,
             samples: vk::SampleCountFlags::TYPE_1,

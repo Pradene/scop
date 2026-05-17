@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use ash::vk;
 
-use super::{UniformBuffer, VkDevice, Uniforms};
 use super::MAX_FRAMES_IN_FLIGHT;
+use super::{UniformBuffer, Uniforms, VkDevice};
 
 pub struct VkDescriptorPool {
     device: Arc<VkDevice>,
@@ -39,7 +39,7 @@ impl VkDescriptorPool {
         &self,
         set_layout: &VkDescriptorSetLayout,
         uniform_buffers: &Vec<UniformBuffer>,
-    ) -> Result<Vec<VkDescriptorSet>, String> {
+    ) -> Result<Vec<vk::DescriptorSet>, String> {
         let layouts = vec![set_layout.inner; MAX_FRAMES_IN_FLIGHT as usize];
 
         let allocate_info = vk::DescriptorSetAllocateInfo {
@@ -82,15 +82,7 @@ impl VkDescriptorPool {
             };
         }
 
-        let sets = descriptor_sets
-            .into_iter()
-            .map(|inner| VkDescriptorSet {
-                _device: self.device.clone(),
-                inner,
-            })
-            .collect::<Vec<_>>();
-
-        return Ok(sets);
+        return Ok(descriptor_sets);
     }
 }
 
@@ -100,11 +92,6 @@ impl Drop for VkDescriptorPool {
             self.device.inner.destroy_descriptor_pool(self.inner, None);
         }
     }
-}
-
-pub struct VkDescriptorSet {
-    _device: Arc<VkDevice>,
-    pub inner: vk::DescriptorSet,
 }
 
 pub struct VkDescriptorSetLayout {

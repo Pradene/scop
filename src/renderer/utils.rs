@@ -39,7 +39,10 @@ pub fn query_swapchain_support(
     });
 }
 
-pub fn find_depth_format(instance: &VkInstance, physical_device: &VkPhysicalDevice) -> Result<vk::Format, String> {
+pub fn find_depth_format(
+    instance: &VkInstance,
+    physical_device: &VkPhysicalDevice,
+) -> Result<vk::Format, String> {
     let candidates = [
         vk::Format::D32_SFLOAT,
         vk::Format::D32_SFLOAT_S8_UINT,
@@ -47,7 +50,9 @@ pub fn find_depth_format(instance: &VkInstance, physical_device: &VkPhysicalDevi
     ];
     for format in candidates {
         let props = unsafe {
-            instance.inner.get_physical_device_format_properties(physical_device.inner, format)
+            instance
+                .inner
+                .get_physical_device_format_properties(physical_device.inner, format)
         };
         if (props.optimal_tiling_features & vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
             == vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT
@@ -64,7 +69,8 @@ pub fn find_memory_type(
     properties: vk::MemoryPropertyFlags,
 ) -> Result<u32, String> {
     let memory_properties = unsafe {
-        context.instance
+        context
+            .instance
             .inner
             .get_physical_device_memory_properties(context.physical_device.inner)
     };

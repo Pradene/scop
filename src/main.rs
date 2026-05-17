@@ -1,8 +1,8 @@
-use scop::WINDOW_HEIGHT;
-use scop::{app::App, WINDOW_WIDTH};
 use scop::camera::Camera;
 use scop::objects::Object;
 use scop::scene::Scene;
+use scop::WINDOW_HEIGHT;
+use scop::{app::App, WINDOW_WIDTH};
 
 use scop::math::Vec3;
 
@@ -20,7 +20,7 @@ fn main() -> Result<(), String> {
         0.1,
         500.,
     );
-    
+
     let object = Object::parse("assets/teapot.obj").unwrap();
     let mut scene = Scene::new(camera);
     scene.add(object);

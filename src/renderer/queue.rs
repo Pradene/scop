@@ -40,18 +40,13 @@ impl VkQueue {
             p_signal_semaphores: signal_semaphores.as_ptr(),
             ..Default::default()
         };
-
+        
         unsafe {
             self.device
-                .inner
-                .queue_submit(self.inner, &[submit_info], *fence)
-                .unwrap()
+            .inner
+            .queue_submit(self.inner, &[submit_info], *fence)
+            .unwrap()
         };
     }
-}
-
-impl Drop for VkQueue {
-    fn drop(&mut self) {
-        unsafe { self.device.inner.queue_wait_idle(self.inner).unwrap() };
-    }
+    
 }

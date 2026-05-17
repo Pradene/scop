@@ -1,4 +1,8 @@
-use crate::{WINDOW_HEIGHT, WINDOW_WIDTH, renderer::{Renderer, VkContext}, scene::Scene};
+use crate::{
+    renderer::{Renderer, VkContext},
+    scene::Scene,
+    WINDOW_HEIGHT, WINDOW_WIDTH,
+};
 
 use winit::{
     application::ApplicationHandler,
@@ -19,12 +23,12 @@ pub struct App {
     last_mouse: Option<(f32, f32)>,
 
     // Keys currently held
-    key_forward:  bool,
+    key_forward: bool,
     key_backward: bool,
-    key_left:     bool,
-    key_right:    bool,
-    key_up:       bool,
-    key_down:     bool,
+    key_left: bool,
+    key_right: bool,
+    key_up: bool,
+    key_down: bool,
 
     last_update: std::time::Instant,
 }
@@ -97,7 +101,11 @@ impl ApplicationHandler for App {
                 }
             }
 
-            WindowEvent::MouseInput { state, button: MouseButton::Right, .. } => {
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Right,
+                ..
+            } => {
                 self.mouse_pressed = state == ElementState::Pressed;
                 if !self.mouse_pressed {
                     self.last_mouse = None;
@@ -124,21 +132,37 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => y * 10.0,
                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.5,
                 };
-                self.scene.camera.move_forward(amount * self.scene.camera.move_speed * 0.05);
+                self.scene
+                    .camera
+                    .move_forward(amount * self.scene.camera.move_speed * 0.05);
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
                 let pressed = event.state == ElementState::Pressed;
                 match event.physical_key {
                     PhysicalKey::Code(KeyCode::Escape) => {
-                        if pressed { event_loop.exit(); }
+                        if pressed {
+                            event_loop.exit();
+                        }
                     }
-                    PhysicalKey::Code(KeyCode::KeyW) | PhysicalKey::Code(KeyCode::ArrowUp)    => self.key_forward  = pressed,
-                    PhysicalKey::Code(KeyCode::KeyS) | PhysicalKey::Code(KeyCode::ArrowDown)  => self.key_backward = pressed,
-                    PhysicalKey::Code(KeyCode::KeyA) | PhysicalKey::Code(KeyCode::ArrowLeft)  => self.key_left     = pressed,
-                    PhysicalKey::Code(KeyCode::KeyD) | PhysicalKey::Code(KeyCode::ArrowRight) => self.key_right    = pressed,
-                    PhysicalKey::Code(KeyCode::KeyE) | PhysicalKey::Code(KeyCode::Space)      => self.key_up       = pressed,
-                    PhysicalKey::Code(KeyCode::KeyQ) | PhysicalKey::Code(KeyCode::ShiftLeft)  => self.key_down     = pressed,
+                    PhysicalKey::Code(KeyCode::KeyW) | PhysicalKey::Code(KeyCode::ArrowUp) => {
+                        self.key_forward = pressed
+                    }
+                    PhysicalKey::Code(KeyCode::KeyS) | PhysicalKey::Code(KeyCode::ArrowDown) => {
+                        self.key_backward = pressed
+                    }
+                    PhysicalKey::Code(KeyCode::KeyA) | PhysicalKey::Code(KeyCode::ArrowLeft) => {
+                        self.key_left = pressed
+                    }
+                    PhysicalKey::Code(KeyCode::KeyD) | PhysicalKey::Code(KeyCode::ArrowRight) => {
+                        self.key_right = pressed
+                    }
+                    PhysicalKey::Code(KeyCode::KeyE) | PhysicalKey::Code(KeyCode::Space) => {
+                        self.key_up = pressed
+                    }
+                    PhysicalKey::Code(KeyCode::KeyQ) | PhysicalKey::Code(KeyCode::ShiftLeft) => {
+                        self.key_down = pressed
+                    }
                     _ => {}
                 }
             }
@@ -164,12 +188,12 @@ impl App {
             scene,
             mouse_pressed: false,
             last_mouse: None,
-            key_forward:  false,
+            key_forward: false,
             key_backward: false,
-            key_left:     false,
-            key_right:    false,
-            key_up:       false,
-            key_down:     false,
+            key_left: false,
+            key_right: false,
+            key_up: false,
+            key_down: false,
             last_update: std::time::Instant::now(),
         }
     }
@@ -181,11 +205,23 @@ impl App {
 
         let speed = self.scene.camera.move_speed * dt;
 
-        if self.key_forward  { self.scene.camera.move_forward( speed); }
-        if self.key_backward { self.scene.camera.move_forward(-speed); }
-        if self.key_right    { self.scene.camera.move_right(   speed); }
-        if self.key_left     { self.scene.camera.move_right(  -speed); }
-        if self.key_up       { self.scene.camera.move_up(      speed); }
-        if self.key_down     { self.scene.camera.move_up(     -speed); }
+        if self.key_forward {
+            self.scene.camera.move_forward(speed);
+        }
+        if self.key_backward {
+            self.scene.camera.move_forward(-speed);
+        }
+        if self.key_right {
+            self.scene.camera.move_right(speed);
+        }
+        if self.key_left {
+            self.scene.camera.move_right(-speed);
+        }
+        if self.key_up {
+            self.scene.camera.move_up(speed);
+        }
+        if self.key_down {
+            self.scene.camera.move_up(-speed);
+        }
     }
 }

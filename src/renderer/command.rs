@@ -1,13 +1,13 @@
 use ash::vk;
 use std::sync::Arc;
 
-use super::{VkDevice, VkPhysicalDevice};
 use super::MAX_FRAMES_IN_FLIGHT;
+use super::{VkDevice, VkPhysicalDevice};
 
 pub struct VkCommandPool {
     device: Arc<VkDevice>,
     pub inner: vk::CommandPool,
-    pub buffers: Vec<VkCommandBuffer>,
+    pub buffers: Vec<vk::CommandBuffer>,
 }
 
 impl VkCommandPool {
@@ -16,7 +16,7 @@ impl VkCommandPool {
         device: Arc<VkDevice>,
     ) -> Result<VkCommandPool, String> {
         let inner = VkCommandPool::create_pool(&device, &physical_device)?;
-        let buffers = VkCommandPool::create_buffers(&device, &inner)?;
+        let buffers = VkCommandPool::create_command_buffers(&device, &inner)?;
 
         return Ok(VkCommandPool {
             device,
@@ -46,10 +46,10 @@ impl VkCommandPool {
         return Ok(command_pool);
     }
 
-    fn create_buffers(
+    fn create_command_buffers(
         device: &Arc<VkDevice>,
         command_pool: &vk::CommandPool,
-    ) -> Result<Vec<VkCommandBuffer>, String> {
+    ) -> Result<Vec<vk::CommandBuffer>, String> {
         let allocate_info = vk::CommandBufferAllocateInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
             command_pool: *command_pool,
@@ -65,14 +65,6 @@ impl VkCommandPool {
                 .map_err(|e| format!("Failed to allocate command buffers: {}", e))?
         };
 
-        let command_buffer = command_buffer
-            .into_iter()
-            .map(|inner| VkCommandBuffer {
-                _device: device.clone(),
-                inner,
-            })
-            .collect();
-
         return Ok(command_buffer);
     }
 }
@@ -83,15 +75,10 @@ impl Drop for VkCommandPool {
             for buffer in &self.buffers {
                 self.device
                     .inner
-                    .free_command_buffers(self.inner, &[buffer.inner]);
+                    .free_command_buffers(self.inner, &[*buffer]);
             }
 
             self.device.inner.destroy_command_pool(self.inner, None);
         }
     }
-}
-
-pub struct VkCommandBuffer {
-    _device: Arc<VkDevice>,
-    pub inner: vk::CommandBuffer,
 }

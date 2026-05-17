@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use winit::window::Window;
 
-use super::{VkPhysicalDevice,VkDevice,VkSurface,VkInstance};
+use super::{VkDevice, VkInstance, VkPhysicalDevice, VkSurface};
 
 pub struct VkContext {
     device: Arc<VkDevice>,
@@ -24,7 +24,7 @@ impl VkContext {
             device,
         })
     }
-    
+
     pub fn device(&self) -> Arc<VkDevice> {
         self.device.clone()
     }

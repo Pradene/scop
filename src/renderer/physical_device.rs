@@ -5,7 +5,7 @@ use ash::{khr, vk, Instance};
 
 use super::query_swapchain_support;
 use super::DEVICE_EXTENSIONS;
-use super::{QueueFamiliesIndices, VkInstance, VkSurface, SwapChainSupportDetails};
+use super::{QueueFamiliesIndices, SwapChainSupportDetails, VkInstance, VkSurface};
 
 pub struct VkPhysicalDevice {
     pub inner: vk::PhysicalDevice,
