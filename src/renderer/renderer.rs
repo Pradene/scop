@@ -313,22 +313,23 @@ impl Renderer {
         };
 
         unsafe {
-            self.context.device().inner
+            let device = self.context.device();
+            device.inner
                 .begin_command_buffer(*command_buffer, &begin_info)
                 .map_err(|e| format!("Failed to begin command buffer: {}", e))?;
 
-            self.context.device().inner.cmd_begin_render_pass(
+            device.inner.cmd_begin_render_pass(
                 *command_buffer, &render_pass_info, vk::SubpassContents::INLINE,
             );
 
-            self.context.device().inner.cmd_bind_pipeline(
+            device.inner.cmd_bind_pipeline(
                 *command_buffer, vk::PipelineBindPoint::GRAPHICS, self.pipeline.inner,
             );
 
-            self.context.device().inner.cmd_set_viewport(*command_buffer, 0, &[viewport]);
-            self.context.device().inner.cmd_set_scissor(*command_buffer, 0, &[scissor]);
+            device.inner.cmd_set_viewport(*command_buffer, 0, &[viewport]);
+            device.inner.cmd_set_scissor(*command_buffer, 0, &[scissor]);
 
-            self.context.device().inner.cmd_bind_descriptor_sets(
+            device.inner.cmd_bind_descriptor_sets(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline.layout,
@@ -337,37 +338,49 @@ impl Renderer {
                 &[],
             );
 
+            // Two rendering for transparent object
+            // Draw back -> front
+            device.inner.cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::FRONT);
+
             for mesh in &self.meshes {
                 for group in &mesh.groups {
                     let pc = MaterialPushConstants::from_material(&group.material);
-                    
-                    self.context.device().inner.cmd_push_constants(
+                    device.inner.cmd_push_constants(
                         *command_buffer,
                         self.pipeline.layout,
                         vk::ShaderStageFlags::FRAGMENT,
                         0,
-                        std::slice::from_raw_parts(
-                            &pc as *const _ as *const u8,
-                            std::mem::size_of::<MaterialPushConstants>(),
-                        ),
+                        std::slice::from_raw_parts(&pc as *const _ as *const u8, std::mem::size_of::<MaterialPushConstants>()),
                     );
 
-                    self.context.device().inner.cmd_bind_vertex_buffers(
-                        *command_buffer, 0, &[group.vertex_buffer.inner], &[0],
-                    );
-                    self.context.device().inner.cmd_bind_index_buffer(
-                        *command_buffer, group.index_buffer.inner, 0, vk::IndexType::UINT32,
-                    );
-                    self.context.device().inner.cmd_draw_indexed(
-                        *command_buffer, group.index_buffer.size as u32, 1, 0, 0, 0,
-                    );
+                    device.inner.cmd_bind_vertex_buffers(*command_buffer, 0, &[group.vertex_buffer.inner], &[0]);
+                    device.inner.cmd_bind_index_buffer(*command_buffer, group.index_buffer.inner, 0, vk::IndexType::UINT32);
+                    device.inner.cmd_draw_indexed(*command_buffer, group.index_buffer.size as u32, 1, 0, 0, 0);
                 }
-                
             }
 
-            self.context.device().inner.cmd_end_render_pass(*command_buffer);
+            device.inner.cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::BACK);
 
-            self.context.device().inner
+            for mesh in &self.meshes {
+                for group in &mesh.groups {
+                    let pc = MaterialPushConstants::from_material(&group.material);
+                    device.inner.cmd_push_constants(
+                        *command_buffer,
+                        self.pipeline.layout,
+                        vk::ShaderStageFlags::FRAGMENT,
+                        0,
+                        std::slice::from_raw_parts(&pc as *const _ as *const u8, std::mem::size_of::<MaterialPushConstants>()),
+                    );
+
+                    device.inner.cmd_bind_vertex_buffers(*command_buffer, 0, &[group.vertex_buffer.inner], &[0]);
+                    device.inner.cmd_bind_index_buffer(*command_buffer, group.index_buffer.inner, 0, vk::IndexType::UINT32);
+                    device.inner.cmd_draw_indexed(*command_buffer, group.index_buffer.size as u32, 1, 0, 0, 0);
+                }
+            }
+
+            device.inner.cmd_end_render_pass(*command_buffer);
+
+            device.inner
                 .end_command_buffer(*command_buffer)
                 .map_err(|e| format!("Failed to end command buffer: {}", e))?;
         }

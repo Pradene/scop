@@ -71,7 +71,6 @@ impl VkPipeline {
             rasterizer_discard_enable: vk::FALSE,
             polygon_mode: vk::PolygonMode::FILL,
             line_width: 1.,
-            cull_mode: vk::CullModeFlags::NONE,
             front_face: vk::FrontFace::CLOCKWISE,
             depth_bias_enable: vk::FALSE,
             depth_bias_constant_factor: 0.,
@@ -125,7 +124,7 @@ impl VkPipeline {
             ..Default::default()
         };
 
-        let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR, vk::DynamicState::CULL_MODE];
         let dynamic_state = vk::PipelineDynamicStateCreateInfo {
             s_type: vk::StructureType::PIPELINE_DYNAMIC_STATE_CREATE_INFO,
             dynamic_state_count: dynamic_states.len() as u32,
