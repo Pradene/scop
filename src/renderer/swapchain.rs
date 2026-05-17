@@ -182,7 +182,7 @@ impl VkSwapchain {
         })
     }
 
-        fn create_image_views(
+    fn create_image_views(
         device: &VkDevice,
         images: &Vec<vk::Image>,
         format: &vk::Format,

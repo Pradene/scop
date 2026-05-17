@@ -3,16 +3,9 @@ use std::ffi::CStr;
 
 use ash::{khr, vk, Instance};
 
+use super::query_swapchain_support;
 use super::DEVICE_EXTENSIONS;
-use super::{QueueFamiliesIndices, VkInstance, VkSurface};
-
-
-#[derive(Clone)]
-pub struct SwapChainSupportDetails {
-    pub capabilities: vk::SurfaceCapabilitiesKHR,
-    pub formats: Vec<vk::SurfaceFormatKHR>,
-    pub present_modes: Vec<vk::PresentModeKHR>,
-}
+use super::{QueueFamiliesIndices, VkInstance, VkSurface, SwapChainSupportDetails};
 
 pub struct VkPhysicalDevice {
     pub inner: vk::PhysicalDevice,
@@ -71,7 +64,7 @@ impl VkPhysicalDevice {
                 Self::rate_device(instance, surface_loader, surface, &inner)?;
 
             let swapchain_support;
-            match VkPhysicalDevice::query_swapchain_support(&inner, surface_loader, surface) {
+            match query_swapchain_support(&inner, surface_loader, surface) {
                 Ok(value) => swapchain_support = value,
                 Err(e) => return Err(format!("Swapchain not supported: {}", e)),
             }
@@ -184,35 +177,5 @@ impl VkPhysicalDevice {
             graphics_family,
             present_family,
         };
-    }
-
-    pub fn query_swapchain_support(
-        inner: &vk::PhysicalDevice,
-        surface_loader: &khr::surface::Instance,
-        surface: &vk::SurfaceKHR,
-    ) -> Result<SwapChainSupportDetails, String> {
-        let capabilities = unsafe {
-            surface_loader
-                .get_physical_device_surface_capabilities(*inner, *surface)
-                .map_err(|e| format!("Failed to get surface capabilities: {}", e))?
-        };
-
-        let formats = unsafe {
-            surface_loader
-                .get_physical_device_surface_formats(*inner, *surface)
-                .map_err(|e| format!("Failed to get surface formats: {}", e))?
-        };
-
-        let present_modes = unsafe {
-            surface_loader
-                .get_physical_device_surface_present_modes(*inner, *surface)
-                .map_err(|e| format!("Failed to get surface present modes: {}", e))?
-        };
-
-        return Ok(SwapChainSupportDetails {
-            capabilities,
-            formats,
-            present_modes,
-        });
     }
 }

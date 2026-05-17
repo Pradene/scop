@@ -3,13 +3,13 @@ use ash::vk;
 use crate::materials::{Material, MaterialPushConstants};
 use crate::math::{Mat4, Vec3};
 use crate::objects::Object;
-use crate::renderer::Uniforms;
+use super::{query_swapchain_support};
 use crate::scene::Scene;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
-    Vertex, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet,
+    Uniforms, Vertex, VkBuffer, VkCommandPool, VkDescriptorPool, VkDescriptorSet,
     VkDescriptorSetLayout, VkFence, VkPipeline, VkQueue,
-    VkRenderPass, VkSemaphore, VkSwapchain, VkContext, UniformBuffer, VkPhysicalDevice
+    VkRenderPass, VkSemaphore, VkSwapchain, VkContext, UniformBuffer
 };
 
 use winit::window::Window;
@@ -71,8 +71,7 @@ impl Renderer {
             context.present_family(),
         );
 
-        let support_details =
-            VkPhysicalDevice::query_swapchain_support(&context.physical_device.inner, &context.surface.loader, &context.surface.inner)?;
+        let support_details = query_swapchain_support(&context.physical_device.inner, &context.surface.loader, &context.surface.inner)?;
 
         let capabilities = support_details.capabilities;
         let surface_format = Renderer::choose_surface_format(&support_details.formats);
@@ -81,9 +80,7 @@ impl Renderer {
         let extent = Renderer::choose_extent(&support_details.capabilities, width, height);
 
         let render_pass = VkRenderPass::new(
-            &context.instance,
-            &context.physical_device,
-            context.device(),
+            &context,
             surface_format.format,
         )?;
 
@@ -383,7 +380,7 @@ impl Renderer {
     pub fn resize(&mut self, width:u32, height: u32) -> Result<(), String> {
         self.wait_idle();
 
-        let support_details = VkPhysicalDevice::query_swapchain_support(
+        let support_details = query_swapchain_support(
             &self.context.physical_device.inner, &self.context.surface.loader, &self.context.surface.inner,
         )?;
 

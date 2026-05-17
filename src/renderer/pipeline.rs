@@ -94,7 +94,7 @@ impl VkPipeline {
         let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
             s_type: vk::StructureType::PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
             depth_test_enable: vk::TRUE,
-            depth_write_enable: vk::TRUE,
+            depth_write_enable: vk::FALSE,
             depth_compare_op: vk::CompareOp::LESS,
             depth_bounds_test_enable: vk::FALSE,
             stencil_test_enable: vk::FALSE,
@@ -107,8 +107,8 @@ impl VkPipeline {
                 | vk::ColorComponentFlags::B
                 | vk::ColorComponentFlags::A,
             blend_enable: vk::TRUE,
-            src_color_blend_factor: vk::BlendFactor::ONE,
-            dst_color_blend_factor: vk::BlendFactor::ZERO,
+            src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
+            dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
             color_blend_op: vk::BlendOp::ADD,
             src_alpha_blend_factor: vk::BlendFactor::ONE,
             dst_alpha_blend_factor: vk::BlendFactor::ZERO,

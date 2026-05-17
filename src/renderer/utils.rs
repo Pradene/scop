@@ -1,4 +1,4 @@
-use ash::vk;
+use ash::{khr, vk};
 
 use super::{VkInstance, VkPhysicalDevice};
 
@@ -42,4 +42,41 @@ pub fn find_depth_format(
     let features = vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT;
 
     return find_supported_format(instance, physical_device, &candidates, tiling, features);
+}
+
+#[derive(Clone)]
+pub struct SwapChainSupportDetails {
+    pub capabilities: vk::SurfaceCapabilitiesKHR,
+    pub formats: Vec<vk::SurfaceFormatKHR>,
+    pub present_modes: Vec<vk::PresentModeKHR>,
+}
+
+pub fn query_swapchain_support(
+    inner: &vk::PhysicalDevice,
+    surface_loader: &khr::surface::Instance,
+    surface: &vk::SurfaceKHR,
+) -> Result<SwapChainSupportDetails, String> {
+    let capabilities = unsafe {
+        surface_loader
+            .get_physical_device_surface_capabilities(*inner, *surface)
+            .map_err(|e| format!("Failed to get surface capabilities: {}", e))?
+    };
+
+    let formats = unsafe {
+        surface_loader
+            .get_physical_device_surface_formats(*inner, *surface)
+            .map_err(|e| format!("Failed to get surface formats: {}", e))?
+    };
+
+    let present_modes = unsafe {
+        surface_loader
+            .get_physical_device_surface_present_modes(*inner, *surface)
+            .map_err(|e| format!("Failed to get surface present modes: {}", e))?
+    };
+
+    return Ok(SwapChainSupportDetails {
+        capabilities,
+        formats,
+        present_modes,
+    });
 }

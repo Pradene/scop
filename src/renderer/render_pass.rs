@@ -1,8 +1,10 @@
 use ash::vk;
 use std::sync::Arc;
 
+use crate::renderer::VkContext;
+
 use super::find_depth_format;
-use super::{VkDevice, VkInstance, VkPhysicalDevice};
+use super::{VkDevice};
 
 pub struct VkRenderPass {
     device: Arc<VkDevice>,
@@ -11,9 +13,7 @@ pub struct VkRenderPass {
 
 impl VkRenderPass {
     pub fn new(
-        instance: &VkInstance,
-        physical_device: &VkPhysicalDevice,
-        device: Arc<VkDevice>,
+        context: &VkContext,
         swapchain_format: vk::Format,
     ) -> Result<VkRenderPass, String> {
         let color_attachment = vk::AttachmentDescription {
@@ -34,7 +34,7 @@ impl VkRenderPass {
         };
 
         let depth_attachment = vk::AttachmentDescription {
-            format: find_depth_format(instance, physical_device)?,
+            format: find_depth_format(&context.instance, &context.physical_device)?,
             samples: vk::SampleCountFlags::TYPE_1,
             load_op: vk::AttachmentLoadOp::CLEAR,
             store_op: vk::AttachmentStoreOp::STORE,
@@ -83,6 +83,7 @@ impl VkRenderPass {
             ..Default::default()
         };
 
+        let device = context.device();
         let inner = unsafe {
             device
                 .inner
