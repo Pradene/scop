@@ -46,7 +46,11 @@ impl ApplicationHandler for App {
             };
 
             match Renderer::new(&window) {
-                Ok(renderer) => {
+                Ok(mut renderer) => {
+                    for obj in &self.scene.objects {
+                        let _ = renderer.upload_mesh(obj);
+                    }
+
                     self.renderer = Some(renderer);
                     self.window = Some(window);
                 }

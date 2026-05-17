@@ -142,22 +142,7 @@ impl Renderer {
         })
     }
 
-    fn sync_meshes(&mut self, scene: &Scene) -> Result<(), String> {
-        // if counts match, assume already in sync (simple Vec approach)
-        if self.meshes.len() == scene.objects.len() {
-            return Ok(());
-        }
-
-        // clear and re-upload everything
-        self.meshes.clear();
-        for obj in &scene.objects {
-            self.upload_mesh(obj)?;
-        }
-
-        Ok(())
-    }
-
-    fn upload_mesh(&mut self, object: &Object) -> Result<(), String> {
+    pub fn upload_mesh(&mut self, object: &Object) -> Result<(), String> {
         let mut groups = Vec::new();
 
         for group in &object.groups {
@@ -223,9 +208,6 @@ impl Renderer {
     }
 
     pub fn draw(&mut self, window: &Window, scene: &Scene, camera: &Camera) -> Result<(), String> {
-        // sync GPU meshes with scene before drawing
-        self.sync_meshes(scene)?;
-
         unsafe {
             self.context
                 .device()
