@@ -40,13 +40,12 @@ impl VkQueue {
             p_signal_semaphores: signal_semaphores.as_ptr(),
             ..Default::default()
         };
-        
+
         unsafe {
             self.device
-            .inner
-            .queue_submit(self.inner, &[submit_info], *fence)
-            .unwrap()
+                .inner
+                .queue_submit(self.inner, &[submit_info], *fence)
+                .unwrap()
         };
     }
-    
 }

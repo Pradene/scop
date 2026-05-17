@@ -10,6 +10,7 @@ use crate::materials::{Material, MaterialPushConstants};
 use crate::math::{Mat4, Vec3};
 use crate::objects::Object;
 use crate::scene::Scene;
+use crate::camera::Camera;
 
 use winit::window::Window;
 
@@ -60,7 +61,14 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(window: &Window, context: VkContext) -> Result<Renderer, String> {
+    pub fn new(window: &Window) -> Result<Renderer, String> {
+        let context = match VkContext::new(window) {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                return Err(format!("Failed to create Vulkan context: {:?}", e));
+            }
+        };
+
         let graphics_queue = VkQueue::new(
             context.device(),
             context.graphics_family(),
@@ -134,8 +142,6 @@ impl Renderer {
         })
     }
 
-    // ── scene sync ────────────────────────────────────────────────────────────
-
     fn sync_meshes(&mut self, scene: &Scene) -> Result<(), String> {
         // if counts match, assume already in sync (simple Vec approach)
         if self.meshes.len() == scene.objects.len() {
@@ -190,12 +196,11 @@ impl Renderer {
         }
 
         self.meshes.push(GpuMesh { groups });
+
         Ok(())
     }
 
-    // ── per-frame ─────────────────────────────────────────────────────────────
-
-    fn update_uniform_buffer(&mut self, current_image: u32, scene: &Scene) {
+    fn update_uniform_buffer(&mut self, current_image: u32, scene: &Scene, camera: &Camera) {
         let elapsed = self.start.elapsed().as_secs_f32();
 
         // take center from first object if present, else zero
@@ -210,14 +215,14 @@ impl Renderer {
 
         let ubo = Uniforms {
             model,
-            view: scene.camera.get_view_matrix(),
-            proj: scene.camera.get_projection_matrix(),
+            view: camera.get_view_matrix(),
+            proj: camera.get_projection_matrix(),
         };
 
         self.uniform_buffers[current_image as usize].write(&ubo);
     }
 
-    pub fn draw(&mut self, window: &Window, scene: &Scene) -> Result<(), String> {
+    pub fn draw(&mut self, window: &Window, scene: &Scene, camera: &Camera) -> Result<(), String> {
         // sync GPU meshes with scene before drawing
         self.sync_meshes(scene)?;
 
@@ -259,7 +264,7 @@ impl Renderer {
             Err(e) => return Err(format!("Failed to acquire next image: {:?}", e)),
         };
 
-        self.update_uniform_buffer(self.frame, scene);
+        self.update_uniform_buffer(self.frame, scene, camera);
 
         unsafe {
             self.context
@@ -448,8 +453,6 @@ impl Renderer {
             }
         }
     }
-
-    // ── helpers ───────────────────────────────────────────────────────────────
 
     pub fn resize(&mut self, width: u32, height: u32) -> Result<(), String> {
         self.wait_idle();

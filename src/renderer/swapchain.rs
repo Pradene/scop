@@ -2,7 +2,7 @@ use ash::{khr, vk};
 use std::sync::Arc;
 
 use super::find_depth_format;
-use super::{VkContext, VkDevice, VkRenderPass, VkImage, VkImageView};
+use super::{VkContext, VkDevice, VkImage, VkRenderPass};
 
 pub struct VkSwapchain {
     device: Arc<VkDevice>,
@@ -14,7 +14,6 @@ pub struct VkSwapchain {
     pub image_views: Vec<vk::ImageView>,
     pub framebuffers: Vec<vk::Framebuffer>,
     pub depth_image: VkImage,
-    pub depth_view: VkImageView,
 }
 
 impl VkSwapchain {
@@ -137,17 +136,10 @@ impl VkSwapchain {
             vk::ImageAspectFlags::DEPTH,
         )?;
 
-        let depth_view = VkImageView::new(
-            context.device(),
-            depth_image.inner,
-            depth_format,
-            vk::ImageAspectFlags::DEPTH,
-        )?;
-
         let framebuffers = image_views
             .iter()
             .map(|&view| {
-                let attachments = [view, depth_view.inner];
+                let attachments = [view, depth_image.view];
                 let create_info = vk::FramebufferCreateInfo {
                     s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
                     render_pass: render_pass.inner,
@@ -178,7 +170,6 @@ impl VkSwapchain {
             image_views,
             framebuffers,
             depth_image,
-            depth_view,
         })
     }
 
@@ -239,8 +230,10 @@ impl VkSwapchain {
             Err(e) => Err(format!("Failed to present queue: {}", e)),
         }
     }
+}
 
-    pub fn destroy(&mut self) {
+impl Drop for VkSwapchain {
+    fn drop(&mut self) {
         unsafe {
             for framebuffer in self.framebuffers.drain(..) {
                 self.device.inner.destroy_framebuffer(framebuffer, None);
@@ -253,11 +246,5 @@ impl VkSwapchain {
                 self.inner = vk::SwapchainKHR::null();
             }
         }
-    }
-}
-
-impl Drop for VkSwapchain {
-    fn drop(&mut self) {
-        self.destroy();
     }
 }

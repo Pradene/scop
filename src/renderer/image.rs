@@ -4,52 +4,6 @@ use std::sync::Arc;
 use super::find_memory_type;
 use super::{VkContext, VkDevice};
 
-pub struct VkImageView {
-    device: Arc<VkDevice>,
-    pub inner: vk::ImageView,
-}
-
-impl VkImageView {
-    pub fn new(
-        device: Arc<VkDevice>,
-        image: vk::Image,
-        format: vk::Format,
-        aspect_flags: vk::ImageAspectFlags,
-    ) -> Result<Self, String> {
-        let create_info = vk::ImageViewCreateInfo {
-            s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-            image,
-            view_type: vk::ImageViewType::TYPE_2D,
-            format,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: aspect_flags,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            },
-            ..Default::default()
-        };
-
-        let inner = unsafe {
-            device
-                .inner
-                .create_image_view(&create_info, None)
-                .map_err(|e| format!("Failed to create image view: {}", e))?
-        };
-
-        Ok(Self { device, inner })
-    }
-}
-
-impl Drop for VkImageView {
-    fn drop(&mut self) {
-        unsafe {
-            self.device.inner.destroy_image_view(self.inner, None);
-        }
-    }
-}
-
 pub struct VkImage {
     device: Arc<VkDevice>,
     pub inner: vk::Image,

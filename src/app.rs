@@ -1,8 +1,4 @@
-use crate::{
-    renderer::{Renderer, VkContext},
-    scene::Scene,
-    WINDOW_HEIGHT, WINDOW_WIDTH,
-};
+use crate::{camera::Camera, renderer::Renderer, scene::Scene, WINDOW_HEIGHT, WINDOW_WIDTH};
 
 use winit::{
     application::ApplicationHandler,
@@ -16,6 +12,7 @@ use winit::{
 pub struct App {
     window: Option<Window>,
     renderer: Option<Renderer>,
+    camera: Camera,
     scene: Scene,
 
     // Mouse state
@@ -48,15 +45,7 @@ impl ApplicationHandler for App {
                 }
             };
 
-            let context = match VkContext::new(&window) {
-                Ok(ctx) => ctx,
-                Err(e) => {
-                    eprintln!("Failed to create Vulkan context: {:?}", e);
-                    return;
-                }
-            };
-
-            match Renderer::new(&window, context) {
+            match Renderer::new(&window) {
                 Ok(renderer) => {
                     self.renderer = Some(renderer);
                     self.window = Some(window);
@@ -82,7 +71,7 @@ impl ApplicationHandler for App {
                 self.tick_movement();
 
                 if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
-                    let _ = renderer.draw(window, &self.scene);
+                    let _ = renderer.draw(window, &self.scene, &self.camera);
                     if !event_loop.exiting() {
                         window.request_redraw();
                     }
@@ -93,7 +82,7 @@ impl ApplicationHandler for App {
                 if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
                     let (width, height): (u32, u32) = window.inner_size().into();
                     if width > 0 && height > 0 {
-                        self.scene.resize(width, height);
+                        self.camera.resize(width, height);
                         if let Err(e) = renderer.resize(width, height) {
                             eprintln!("Failed to handle swapchain resize: {:?}", e);
                         }
@@ -120,7 +109,7 @@ impl ApplicationHandler for App {
                             let size = window.inner_size();
                             let dx = (current.0 - last.0) / size.width as f32;
                             let dy = (current.1 - last.1) / size.height as f32;
-                            self.scene.camera.look(dx, dy);
+                            self.camera.look(dx, dy);
                         }
                     }
                 }
@@ -132,9 +121,8 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => y * 10.0,
                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.5,
                 };
-                self.scene
-                    .camera
-                    .move_forward(amount * self.scene.camera.move_speed * 0.05);
+                self.camera
+                    .move_forward(amount * self.camera.move_speed * 0.05);
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
@@ -181,11 +169,12 @@ impl ApplicationHandler for App {
 }
 
 impl App {
-    pub fn new(scene: Scene) -> App {
+    pub fn new(scene: Scene, camera: Camera) -> App {
         App {
             window: None,
             renderer: None,
             scene,
+            camera,
             mouse_pressed: false,
             last_mouse: None,
             key_forward: false,
@@ -203,25 +192,25 @@ impl App {
         let dt = now.duration_since(self.last_update).as_secs_f32();
         self.last_update = now;
 
-        let speed = self.scene.camera.move_speed * dt;
+        let speed = self.camera.move_speed * dt;
 
         if self.key_forward {
-            self.scene.camera.move_forward(speed);
+            self.camera.move_forward(speed);
         }
         if self.key_backward {
-            self.scene.camera.move_forward(-speed);
+            self.camera.move_forward(-speed);
         }
         if self.key_right {
-            self.scene.camera.move_right(speed);
+            self.camera.move_right(speed);
         }
         if self.key_left {
-            self.scene.camera.move_right(-speed);
+            self.camera.move_right(-speed);
         }
         if self.key_up {
-            self.scene.camera.move_up(speed);
+            self.camera.move_up(speed);
         }
         if self.key_down {
-            self.scene.camera.move_up(-speed);
+            self.camera.move_up(-speed);
         }
     }
 }

@@ -21,11 +21,12 @@ fn main() -> Result<(), String> {
         500.,
     );
 
+    let mut scene = Scene::new();
+
     let object = Object::parse("assets/teapot.obj").unwrap();
-    let mut scene = Scene::new(camera);
     scene.add(object);
 
-    let mut app = App::new(scene);
+    let mut app = App::new(scene, camera);
 
     let _ = event_loop.run_app(&mut app);
 
