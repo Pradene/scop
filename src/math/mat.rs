@@ -2,9 +2,7 @@ use crate::math::{Vec3, Vec4};
 use std::fmt;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
-// ─────────────────────────────────────────────
-//  Mat4  (column-major, 4 × Vec4 columns)
-// ─────────────────────────────────────────────
+//  Mat4  (column-major, 4 x Vec4 columns)
 //
 //  Columns:  x_axis  y_axis  z_axis  w_axis
 //  Layout:   col 0   col 1   col 2   col 3
@@ -19,8 +17,6 @@ pub struct Mat4 {
     pub z_axis: Vec4, // column 2
     pub w_axis: Vec4, // column 3
 }
-
-// ── Constructors ─────────────────────────────
 
 impl Mat4 {
     /// Build from four *column* vectors.
@@ -95,8 +91,6 @@ impl Mat4 {
     }
 }
 
-// ── Linear algebra ───────────────────────────
-
 impl Mat4 {
     pub fn transpose(&self) -> Self {
         Self::from_cols_array([
@@ -133,8 +127,6 @@ impl Mat4 {
     }
 }
 
-// ── Camera / projection ──────────────────────
-
 impl Mat4 {
     /// Right-handed look-at view matrix (camera looks down −Z, OpenGL convention).
     pub fn look_at(position: Vec3, target: Vec3, up: Vec3) -> Self {
@@ -164,8 +156,6 @@ impl Mat4 {
         )
     }
 }
-
-// ── Transforms ───────────────────────────────
 
 impl Mat4 {
     /// Returns `translation * self`.
@@ -207,8 +197,6 @@ impl Mat4 {
         sc * *self
     }
 }
-
-// ── Arithmetic ops ───────────────────────────
 
 impl Add for Mat4 {
     type Output = Self;
@@ -302,8 +290,6 @@ impl PartialEq for Mat4 {
         })
     }
 }
-
-// ── Display ───────────────────────────────────
 
 impl fmt::Display for Mat4 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
