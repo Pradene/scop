@@ -6,8 +6,11 @@ use super::create_buffer;
 use super::{VkContext, VkDevice};
 use crate::math::Mat4;
 
-pub struct Uniforms {
+pub struct VertexPushConstants {
     pub model: Mat4,
+}
+
+pub struct Uniforms {
     pub view: Mat4,
     pub proj: Mat4,
 }

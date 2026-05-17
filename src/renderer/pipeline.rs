@@ -1,6 +1,8 @@
 use crate::material::MaterialPushConstants;
 
-use super::{Vertex, VkDescriptorSetLayout, VkDevice, VkRenderPass, VkShaderModule};
+use super::{
+    Vertex, VertexPushConstants, VkDescriptorSetLayout, VkDevice, VkRenderPass, VkShaderModule,
+};
 
 use ash::vk;
 use std::ffi::CString;
@@ -93,7 +95,7 @@ impl VkPipeline {
         let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
             s_type: vk::StructureType::PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
             depth_test_enable: vk::TRUE,
-            depth_write_enable: vk::FALSE,
+            depth_write_enable: vk::TRUE,
             depth_compare_op: vk::CompareOp::LESS,
             depth_bounds_test_enable: vk::FALSE,
             stencil_test_enable: vk::FALSE,
@@ -136,18 +138,25 @@ impl VkPipeline {
             ..Default::default()
         };
 
-        let push_constant_range = vk::PushConstantRange {
-            stage_flags: vk::ShaderStageFlags::FRAGMENT,
-            offset: 0,
-            size: std::mem::size_of::<MaterialPushConstants>() as u32,
-        };
+        let push_constant_ranges = [
+            vk::PushConstantRange {
+                stage_flags: vk::ShaderStageFlags::VERTEX,
+                offset: 0,
+                size: std::mem::size_of::<VertexPushConstants>() as u32,
+            },
+            vk::PushConstantRange {
+                stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                offset: 64,
+                size: std::mem::size_of::<MaterialPushConstants>() as u32,
+            },
+        ];
 
         let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
             s_type: vk::StructureType::PIPELINE_LAYOUT_CREATE_INFO,
             set_layout_count: 1,
             p_set_layouts: &descriptor_set_layout.inner,
-            push_constant_range_count: 1,
-            p_push_constant_ranges: &push_constant_range,
+            push_constant_range_count: push_constant_ranges.len() as u32,
+            p_push_constant_ranges: push_constant_ranges.as_ptr(),
             ..Default::default()
         };
 

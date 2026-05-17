@@ -5,6 +5,7 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec3 fragPos;
 
 layout(push_constant) uniform Material {
+    layout(offset = 64)
     vec3 ambient;
     float dissolve;
     vec3 diffuse;

@@ -3,8 +3,9 @@ use ash::vk;
 use super::query_swapchain_support;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
-    UniformBuffer, Uniforms, Vertex, VkBuffer, VkCommandPool, VkContext, VkDescriptorPool,
-    VkDescriptorSetLayout, VkFence, VkPipeline, VkQueue, VkRenderPass, VkSemaphore, VkSwapchain,
+    UniformBuffer, Uniforms, Vertex, VertexPushConstants, VkBuffer, VkCommandPool, VkContext,
+    VkDescriptorPool, VkDescriptorSetLayout, VkFence, VkPipeline, VkQueue, VkRenderPass,
+    VkSemaphore, VkSwapchain,
 };
 use crate::camera::Camera;
 use crate::material::{Material, MaterialPushConstants};
@@ -180,20 +181,7 @@ impl Renderer {
     }
 
     fn update_uniform_buffer(&mut self, current_image: u32, scene: &Scene, camera: &Camera) {
-        let elapsed = self.start.elapsed().as_secs_f32();
-
-        // take center from first object if present, else zero
-        let center = scene
-            .objects
-            .first()
-            .map(|o| o.center)
-            .unwrap_or_else(|| Vec3::ZERO);
-
-        let model = Mat4::identity().rotate((90.0 * elapsed).to_radians(), Vec3::Y)
-            * Mat4::identity().translate(center * -1.);
-
         let ubo = Uniforms {
-            model,
             view: camera.get_view_matrix(),
             proj: camera.get_projection_matrix(),
         };
@@ -259,7 +247,11 @@ impl Renderer {
                 .map_err(|e| format!("Failed to reset command buffer: {}", e))?;
         }
 
-        self.record_command_buffer(&self.command_pool.buffers[self.frame as usize], image_index)?;
+        self.record_command_buffer(
+            &self.command_pool.buffers[self.frame as usize],
+            image_index,
+            scene,
+        )?;
 
         let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].inner];
         let wait_semaphores = [self.image_available_semaphores[self.frame as usize].inner];
@@ -299,6 +291,7 @@ impl Renderer {
         &self,
         command_buffer: &vk::CommandBuffer,
         image_index: u32,
+        scene: &Scene,
     ) -> Result<(), String> {
         let begin_info = vk::CommandBufferBeginInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
@@ -384,12 +377,12 @@ impl Renderer {
             device
                 .inner
                 .cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::FRONT);
-            self.draw_meshes(&device.inner, command_buffer);
+            self.draw_meshes(&device.inner, command_buffer, scene);
 
             device
                 .inner
                 .cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::BACK);
-            self.draw_meshes(&device.inner, command_buffer);
+            self.draw_meshes(&device.inner, command_buffer, scene);
 
             device.inner.cmd_end_render_pass(*command_buffer);
 
@@ -402,18 +395,34 @@ impl Renderer {
         Ok(())
     }
 
-    fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer) {
-        for mesh in &self.meshes {
+    fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer, scene: &Scene) {
+        for (mesh_idx, mesh) in self.meshes.iter().enumerate() {
+            let model_matrix = Mat4::identity();
+            let vpc = VertexPushConstants {
+                model: model_matrix,
+            };
+
             for group in &mesh.groups {
-                let pc = MaterialPushConstants::from_material(&group.material);
+                let fpc = MaterialPushConstants::from_material(&group.material);
+
                 unsafe {
                     device.cmd_push_constants(
                         *cmd,
                         self.pipeline.layout,
-                        vk::ShaderStageFlags::FRAGMENT,
+                        vk::ShaderStageFlags::VERTEX,
                         0,
                         std::slice::from_raw_parts(
-                            &pc as *const _ as *const u8,
+                            &vpc as *const _ as *const u8,
+                            std::mem::size_of::<VertexPushConstants>(),
+                        ),
+                    );
+                    device.cmd_push_constants(
+                        *cmd,
+                        self.pipeline.layout,
+                        vk::ShaderStageFlags::FRAGMENT,
+                        64,
+                        std::slice::from_raw_parts(
+                            &fpc as *const _ as *const u8,
                             std::mem::size_of::<MaterialPushConstants>(),
                         ),
                     );
@@ -425,7 +434,10 @@ impl Renderer {
                         0,
                         vk::IndexType::UINT32,
                     );
-                    device.cmd_draw_indexed(*cmd, group.index_buffer.size as u32, 1, 0, 0, 0);
+
+                    let index_count =
+                        (group.index_buffer.size / std::mem::size_of::<u32>() as u64) as u32;
+                    device.cmd_draw_indexed(*cmd, index_count, 1, 0, 0, 0);
                 }
             }
         }
