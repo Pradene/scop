@@ -1,8 +1,6 @@
 use std::sync::Arc;
-
 use ash::vk;
 
-use super::MAX_FRAMES_IN_FLIGHT;
 use super::{Uniforms, VkBuffer, VkDevice};
 
 pub struct VkDescriptorPool {
@@ -11,17 +9,17 @@ pub struct VkDescriptorPool {
 }
 
 impl VkDescriptorPool {
-    pub fn new(device: Arc<VkDevice>) -> Result<Self, String> {
+    pub fn new(device: Arc<VkDevice>, max_sets: u32) -> Result<Self, String> {
         let pool_size = vk::DescriptorPoolSize {
             ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: MAX_FRAMES_IN_FLIGHT,
+            descriptor_count: max_sets,
         };
 
         let create_info = vk::DescriptorPoolCreateInfo {
             s_type: vk::StructureType::DESCRIPTOR_POOL_CREATE_INFO,
             pool_size_count: 1,
             p_pool_sizes: &pool_size,
-            max_sets: MAX_FRAMES_IN_FLIGHT,
+            max_sets,
             ..Default::default()
         };
 
@@ -35,54 +33,46 @@ impl VkDescriptorPool {
         return Ok(VkDescriptorPool { device, handle });
     }
 
-    pub fn create_sets(
+    pub fn create_set(
         &self,
-        set_layout: &VkDescriptorSetLayout,
-        uniform_buffers: &Vec<VkBuffer<Uniforms>>,
-    ) -> Result<Vec<vk::DescriptorSet>, String> {
-        let layouts = vec![set_layout.handle; MAX_FRAMES_IN_FLIGHT as usize];
-
+        layout: &VkDescriptorSetLayout,
+        uniform_buffer: &VkBuffer<Uniforms>,
+    ) -> Result<vk::DescriptorSet, String> {
         let allocate_info = vk::DescriptorSetAllocateInfo {
             s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
             descriptor_pool: self.handle,
-            descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
-            p_set_layouts: layouts.as_ptr(),
+            descriptor_set_count: 1,
+            p_set_layouts: &layout.handle,
             ..Default::default()
         };
 
-        let descriptor_sets = unsafe {
+        let set = unsafe {
             self.device
                 .handle
                 .allocate_descriptor_sets(&allocate_info)
-                .map_err(|e| format!("Failed to allocate descriptor sets: {}", e))?
+                .map_err(|e| format!("Failed to allocate descriptor set: {}", e))?
+                .remove(0)
         };
 
-        for index in 0..MAX_FRAMES_IN_FLIGHT {
-            let buffer_info = vk::DescriptorBufferInfo {
-                buffer: uniform_buffers[index as usize].handle,
-                offset: 0,
-                range: std::mem::size_of::<Uniforms>() as u64,
-            };
+        let buffer_info = vk::DescriptorBufferInfo {
+            buffer: uniform_buffer.handle,
+            offset: 0,
+            range: std::mem::size_of::<Uniforms>() as u64,
+        };
 
-            let descriptor_write = vk::WriteDescriptorSet {
-                s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
-                dst_set: descriptor_sets[index as usize],
-                dst_binding: 0,
-                dst_array_element: 0,
-                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                descriptor_count: 1,
-                p_buffer_info: &buffer_info,
-                ..Default::default()
-            };
+        let write = vk::WriteDescriptorSet {
+            s_type: vk::StructureType::WRITE_DESCRIPTOR_SET,
+            dst_set: set,
+            dst_binding: 0,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            p_buffer_info: &buffer_info,
+            ..Default::default()
+        };
 
-            unsafe {
-                self.device
-                    .handle
-                    .update_descriptor_sets(&[descriptor_write], &[])
-            };
-        }
+        unsafe { self.device.handle.update_descriptor_sets(&[write], &[]) };
 
-        return Ok(descriptor_sets);
+        Ok(set)
     }
 }
 
