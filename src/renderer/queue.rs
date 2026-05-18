@@ -28,7 +28,7 @@ impl VkQueue {
         signal_semaphores: &[vk::Semaphore],
         wait_stages: &[vk::PipelineStageFlags],
         fence: &vk::Fence,
-    ) {
+    ) -> Result<(), String> {
         let submit_info = vk::SubmitInfo {
             s_type: vk::StructureType::SUBMIT_INFO,
             wait_semaphore_count: wait_semaphores.len() as u32,
@@ -45,7 +45,7 @@ impl VkQueue {
             self.device
                 .handle
                 .queue_submit(self.handle, &[submit_info], *fence)
-                .unwrap()
-        };
+                .map_err(|e| format!("Failed to submit queue: {}", e))
+        }
     }
 }

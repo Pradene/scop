@@ -35,8 +35,6 @@ pub struct Renderer {
     present_queue: VkQueue,
     graphics_queue: VkQueue,
     context: VkContext,
-
-    start: std::time::Instant,
 }
 
 impl Renderer {
@@ -103,7 +101,6 @@ impl Renderer {
             descriptor_set_layout,
             frames,
             frame: 0,
-            start: std::time::Instant::now(),
             meshes: Vec::new(),
         })
     }
@@ -171,63 +168,76 @@ impl Renderer {
     }
 
     pub fn draw(&mut self, window: &Window, _scene: &Scene, camera: &Camera) -> Result<(), String> {
-        let device = self.context.device();
+        self.wait_for_frame()?;
 
-        unsafe {
-            device
-                .handle
-                .wait_for_fences(&[self.frames[self.frame].in_flight.handle], true, u64::MAX)
-                .map_err(|e| format!("Failed to wait for fence: {}", e))?;
-        }
-
-        let acquire_result = unsafe {
-            self.swapchain.loader.acquire_next_image(
-                self.swapchain.handle,
-                u64::MAX,
-                self.frames[self.frame].image_available.handle,
-                vk::Fence::null(),
-            )
-        };
-
-        let image_index = match acquire_result {
-            Ok((index, suboptimal)) => {
-                if suboptimal {
-                    let (w, h) = window.inner_size().into();
-                    self.resize(w, h)?;
-                    return Ok(());
-                }
-                index
-            }
-            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+        let image_index = match self.acquire_image()? {
+            Some(index) => index,
+            None => {
                 let (w, h) = window.inner_size().into();
                 self.resize(w, h)?;
                 return Ok(());
             }
-            Err(e) => return Err(format!("Failed to acquire next image: {:?}", e)),
         };
 
         self.frames[self.frame].update_uniforms(camera);
+        self.reset_frame()?;
+        self.record(image_index)?;
+        self.submit()?;
 
-        unsafe {
-            device
-                .handle
-                .reset_fences(&[self.frames[self.frame].in_flight.handle])
-                .map_err(|e| format!("Failed to reset fence: {}", e))?;
-
-            device
-                .handle
-                .reset_command_buffer(
-                    self.frames[self.frame].command_buffer,
-                    vk::CommandBufferResetFlags::empty(),
-                )
-                .map_err(|e| format!("Failed to reset command buffer: {}", e))?;
+        if self.present(image_index)? {
+            let (w, h) = window.inner_size().into();
+            self.resize(w, h)?;
         }
 
-        let frame = &self.frames[self.frame];
-        self.record_command_buffer(frame, image_index)?;
+        self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT as usize;
+        Ok(())
+    }
 
-        let signal_semaphores = [frame.render_finished.handle];
+    fn wait_for_frame(&self) -> Result<(), String> {
+        let fence = self.frames[self.frame].in_flight.handle;
+        unsafe {
+            self.context.device().handle
+                .wait_for_fences(&[fence], true, u64::MAX)
+                .map_err(|e| format!("Failed to wait for fence: {}", e))
+        }
+    }
+
+    fn acquire_image(&self) -> Result<Option<u32>, String> {
+        let semaphore = self.frames[self.frame].image_available.handle;
+        match unsafe {
+            self.swapchain.loader.acquire_next_image(
+                self.swapchain.handle,
+                u64::MAX,
+                semaphore,
+                vk::Fence::null(),
+            )
+        } {
+            Ok((index, false)) => Ok(Some(index)),
+            Ok((_, true)) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => Ok(None),
+            Err(e) => Err(format!("Failed to acquire next image: {:?}", e)),
+        }
+    }
+
+    fn reset_frame(&self) -> Result<(), String> {
+        let frame = &self.frames[self.frame];
+        let device = self.context.device();
+        unsafe {
+            device.handle
+                .reset_fences(&[frame.in_flight.handle])
+                .map_err(|e| format!("Failed to reset fence: {}", e))?;
+            device.handle
+                .reset_command_buffer(
+                    frame.command_buffer,
+                    vk::CommandBufferResetFlags::empty(),
+                )
+                .map_err(|e| format!("Failed to reset command buffer: {}", e))
+        }
+    }
+
+    fn submit(&self) -> Result<(), String> {
+        let frame = &self.frames[self.frame];
         let wait_semaphores = [frame.image_available.handle];
+        let signal_semaphores = [frame.render_finished.handle];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
         self.graphics_queue.submit(
@@ -236,51 +246,65 @@ impl Renderer {
             &signal_semaphores,
             &wait_stages,
             &frame.in_flight.handle,
-        );
+        )
+    }
 
-        match self.swapchain.queue_present(
+    fn present(&self, image_index: u32) -> Result<bool, String> {
+        let signal_semaphores = [self.frames[self.frame].render_finished.handle];
+        self.swapchain.queue_present(
             &self.present_queue.handle,
             &signal_semaphores,
             image_index,
-        ) {
-            Ok(must_recreate) => {
-                if must_recreate {
-                    let (w, h) = window.inner_size().into();
-                    self.resize(w, h)?;
-                }
-            }
-            Err(e) => return Err(format!("Critical presentation error: {}", e)),
-        }
-
-        self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT as usize;
-
-        Ok(())
+        )
     }
 
-    fn record_command_buffer(
-        &self,
-        frame: &FrameData,
-        image_index: u32,
-    ) -> Result<(), String> {
+    fn record(&self, image_index: u32) -> Result<(), String> {
+        let frame = &self.frames[self.frame];
         let cmd = frame.command_buffer;
         let device = self.context.device();
 
+        self.begin_command_buffer(cmd)?;
+        self.begin_render_pass(cmd, image_index);
+        self.bind_pipeline_and_viewport(cmd, frame);
+
+        unsafe {
+            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
+            self.draw_meshes(&device.handle, &cmd);
+            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
+            self.draw_meshes(&device.handle, &cmd);
+            device.handle.cmd_end_render_pass(cmd);
+        }
+
+        self.end_command_buffer(cmd)
+    }
+
+    fn begin_command_buffer(&self, cmd: vk::CommandBuffer) -> Result<(), String> {
         let begin_info = vk::CommandBufferBeginInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
             ..Default::default()
         };
+        unsafe {
+            self.context.device().handle
+                .begin_command_buffer(cmd, &begin_info)
+                .map_err(|e| format!("Failed to begin command buffer: {}", e))
+        }
+    }
 
+    fn end_command_buffer(&self, cmd: vk::CommandBuffer) -> Result<(), String> {
+        unsafe {
+            self.context.device().handle
+                .end_command_buffer(cmd)
+                .map_err(|e| format!("Failed to end command buffer: {}", e))
+        }
+    }
+
+    fn begin_render_pass(&self, cmd: vk::CommandBuffer, image_index: u32) {
         let clear_values = [
             vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0., 0., 0., 1.],
-                },
+                color: vk::ClearColorValue { float32: [0., 0., 0., 1.] },
             },
             vk::ClearValue {
-                depth_stencil: vk::ClearDepthStencilValue {
-                    depth: 1.,
-                    stencil: 0,
-                },
+                depth_stencil: vk::ClearDepthStencilValue { depth: 1., stencil: 0 },
             },
         ];
 
@@ -297,41 +321,32 @@ impl Renderer {
             ..Default::default()
         };
 
+        unsafe {
+            self.context.device().handle.cmd_begin_render_pass(
+                cmd,
+                &render_pass_info,
+                vk::SubpassContents::INLINE,
+            );
+        }
+    }
+
+    fn bind_pipeline_and_viewport(&self, cmd: vk::CommandBuffer, frame: &FrameData) {
         let viewport = vk::Viewport {
-            x: 0.,
-            y: 0.,
+            x: 0., y: 0.,
             width: self.swapchain.extent.width as f32,
             height: self.swapchain.extent.height as f32,
-            min_depth: 0.,
-            max_depth: 1.,
+            min_depth: 0., max_depth: 1.,
         };
-
         let scissor = vk::Rect2D {
             offset: vk::Offset2D { x: 0, y: 0 },
             extent: self.swapchain.extent,
         };
 
+        let device = self.context.device();
         unsafe {
-            device
-                .handle
-                .begin_command_buffer(cmd, &begin_info)
-                .map_err(|e| format!("Failed to begin command buffer: {}", e))?;
-
-            device.handle.cmd_begin_render_pass(
-                cmd,
-                &render_pass_info,
-                vk::SubpassContents::INLINE,
-            );
-
-            device.handle.cmd_bind_pipeline(
-                cmd,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline.handle,
-            );
-
+            device.handle.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline.handle);
             device.handle.cmd_set_viewport(cmd, 0, &[viewport]);
             device.handle.cmd_set_scissor(cmd, 0, &[scissor]);
-
             device.handle.cmd_bind_descriptor_sets(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -340,76 +355,57 @@ impl Renderer {
                 &[frame.descriptor_set],
                 &[],
             );
-
-            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
-            self.draw_meshes(&device.handle, &cmd);
-
-            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
-            self.draw_meshes(&device.handle, &cmd);
-
-            device.handle.cmd_end_render_pass(cmd);
-
-            device
-                .handle
-                .end_command_buffer(cmd)
-                .map_err(|e| format!("Failed to end command buffer: {}", e))?;
         }
-
-        Ok(())
     }
 
     fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer) {
         for mesh in &self.meshes {
-            let vpc = ModelPushConstants {
-                model: Mat4::identity(),
-            };
-
-            unsafe {
-                device.cmd_push_constants(
-                    *cmd,
-                    self.pipeline.layout,
-                    vk::ShaderStageFlags::VERTEX,
-                    0,
-                    std::slice::from_raw_parts(
-                        &vpc as *const _ as *const u8,
-                        std::mem::size_of::<ModelPushConstants>(),
-                    ),
-                );
-
-                device.cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.handle], &[0]);
-                device.cmd_bind_index_buffer(
-                    *cmd,
-                    mesh.index_buffer.handle,
-                    0,
-                    vk::IndexType::UINT32,
-                );
-            }
-
+            self.bind_mesh(device, cmd, mesh);
             for submesh in &mesh.primitives {
-                let fpc = MaterialPushConstants::from_material(&submesh.material);
-
-                unsafe {
-                    device.cmd_push_constants(
-                        *cmd,
-                        self.pipeline.layout,
-                        vk::ShaderStageFlags::FRAGMENT,
-                        64,
-                        std::slice::from_raw_parts(
-                            &fpc as *const _ as *const u8,
-                            std::mem::size_of::<MaterialPushConstants>(),
-                        ),
-                    );
-
-                    device.cmd_draw_indexed(
-                        *cmd,
-                        submesh.index_count,
-                        1,
-                        submesh.index_offset,
-                        submesh.vertex_offset,
-                        0,
-                    );
-                }
+                self.draw_submesh(device, cmd, submesh);
             }
+        }
+    }
+
+    fn bind_mesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, mesh: &Mesh) {
+        let vpc = ModelPushConstants { model: Mat4::identity() };
+        unsafe {
+            device.cmd_push_constants(
+                *cmd,
+                self.pipeline.layout,
+                vk::ShaderStageFlags::VERTEX,
+                0,
+                std::slice::from_raw_parts(
+                    &vpc as *const _ as *const u8,
+                    std::mem::size_of::<ModelPushConstants>(),
+                ),
+            );
+            device.cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.handle], &[0]);
+            device.cmd_bind_index_buffer(*cmd, mesh.index_buffer.handle, 0, vk::IndexType::UINT32);
+        }
+    }
+
+    fn draw_submesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, submesh: &SubMesh) {
+        let fpc = MaterialPushConstants::from_material(&submesh.material);
+        unsafe {
+            device.cmd_push_constants(
+                *cmd,
+                self.pipeline.layout,
+                vk::ShaderStageFlags::FRAGMENT,
+                64,
+                std::slice::from_raw_parts(
+                    &fpc as *const _ as *const u8,
+                    std::mem::size_of::<MaterialPushConstants>(),
+                ),
+            );
+            device.cmd_draw_indexed(
+                *cmd,
+                submesh.index_count,
+                1,
+                submesh.index_offset,
+                submesh.vertex_offset,
+                0,
+            );
         }
     }
 
