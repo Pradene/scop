@@ -1,7 +1,7 @@
 use ash::vk;
 use std::marker::PhantomData;
 use std::sync::Arc;
-
+use std::ffi::c_void;
 use super::find_memory_type;
 use super::{VkCommandPool, VkContext, VkDevice, VkQueue};
 
@@ -10,11 +10,12 @@ pub struct VkBuffer<T> {
     pub inner: vk::Buffer,
     pub size: vk::DeviceSize,
     pub memory: vk::DeviceMemory,
+    pub mapped: Option<*mut c_void>,
     _type: PhantomData<T>,
 }
 
 impl<T: Copy> VkBuffer<T> {
-    pub fn new(
+    pub fn device_local(
         context: &VkContext,
         queue: &VkQueue,
         command_pool: &VkCommandPool,
@@ -65,14 +66,58 @@ impl<T: Copy> VkBuffer<T> {
             inner,
             size,
             memory,
+            mapped: None,
             _type: PhantomData,
         })
+    }
+}
+
+impl<T> VkBuffer<T> {
+    pub fn host_visible(
+        context: &VkContext,
+        count: usize,
+        usage: vk::BufferUsageFlags,
+    ) -> Result<Self, String> {
+        let device = context.device();
+        let size = (std::mem::size_of::<T>() * count) as u64;
+
+        let properties = vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+        let (inner, memory) = create_buffer(context, &size, &usage, &properties)?;
+
+        let mapped = unsafe {
+            device.inner
+                .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())
+                .map_err(|e| format!("Failed to map host-visible buffer memory: {}", e))?
+        };
+
+        Ok(Self {
+            device,
+            inner,
+            size,
+            memory,
+            mapped: Some(mapped),
+            _type: PhantomData,
+        })
+    }
+
+    pub fn write(&self, data: &[T]) {
+        let ptr = self.mapped.expect("Cannot write to a non-mapped buffer!");
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                data.as_ptr(), 
+                ptr as *mut T, 
+                data.len()
+            );
+        }
     }
 }
 
 impl<T> Drop for VkBuffer<T> {
     fn drop(&mut self) {
         unsafe {
+            if self.mapped.is_some() {
+                self.device.inner.unmap_memory(self.memory);
+            }
             self.device.inner.free_memory(self.memory, None);
             self.device.inner.destroy_buffer(self.inner, None);
         }

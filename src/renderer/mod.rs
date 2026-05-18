@@ -14,7 +14,6 @@ mod shaders;
 mod surface;
 mod swapchain;
 mod sync;
-mod uniform_buffer;
 mod utils;
 mod vertex;
 
@@ -34,7 +33,6 @@ pub use shaders::*;
 pub use surface::*;
 pub use swapchain::*;
 pub use sync::*;
-pub use uniform_buffer::*;
 pub use utils::*;
 pub use vertex::*;
 

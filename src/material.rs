@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader};
-
 use crate::math::Vec3;
 
 #[derive(Debug, Default, Clone)]

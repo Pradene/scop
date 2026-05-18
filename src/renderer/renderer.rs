@@ -3,13 +3,13 @@ use ash::vk;
 use super::query_swapchain_support;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
-    UniformBuffer, Uniforms, Vertex, VertexPushConstants, VkBuffer, VkCommandPool, VkContext,
+    VkBuffer, Vertex, VkCommandPool, VkContext,
     VkDescriptorPool, VkDescriptorSetLayout, VkFence, VkPipeline, VkQueue, VkRenderPass,
     VkSemaphore, VkSwapchain,
 };
 use crate::camera::Camera;
 use crate::material::{Material, MaterialPushConstants};
-use crate::math::{Mat4, Vec3};
+use crate::math::Mat4;
 use crate::object::Object;
 use crate::scene::Scene;
 
@@ -25,6 +25,15 @@ pub struct GpuMesh {
     pub groups: Vec<GpuGroup>,
 }
 
+pub struct VertexPushConstants {
+    pub model: Mat4,
+}
+
+pub struct Uniforms {
+    pub view: Mat4,
+    pub proj: Mat4,
+}
+
 pub struct Renderer {
     // Sync primitives
     pub image_available_semaphores: Vec<VkSemaphore>,
@@ -37,7 +46,7 @@ pub struct Renderer {
     pub descriptor_set_layout: VkDescriptorSetLayout,
 
     // Buffers
-    pub uniform_buffers: Vec<UniformBuffer>,
+    pub uniform_buffers: Vec<VkBuffer<Uniforms>>,
     meshes: Vec<GpuMesh>,
 
     // Commands
@@ -153,14 +162,14 @@ impl Renderer {
                 .cloned()
                 .unwrap_or_default();
 
-            let vertex_buffer = VkBuffer::new(
+            let vertex_buffer = VkBuffer::device_local(
                 &self.context,
                 &self.graphics_queue,
                 &self.command_pool,
                 &vertices,
                 vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
             )?;
-            let index_buffer = VkBuffer::new(
+            let index_buffer = VkBuffer::device_local(
                 &self.context,
                 &self.graphics_queue,
                 &self.command_pool,
@@ -186,10 +195,10 @@ impl Renderer {
             proj: camera.get_projection_matrix(),
         };
 
-        self.uniform_buffers[current_image as usize].write(&ubo);
+        self.uniform_buffers[current_image as usize].write(&[ubo]);
     }
 
-    pub fn draw(&mut self, window: &Window, scene: &Scene, camera: &Camera) -> Result<(), String> {
+    pub fn draw(&mut self, window: &Window, _scene: &Scene, camera: &Camera) -> Result<(), String> {
         unsafe {
             self.context
                 .device()
@@ -460,9 +469,9 @@ impl Renderer {
         )
     }
 
-    fn create_uniform_buffers(context: &VkContext) -> Result<Vec<UniformBuffer>, String> {
+    fn create_uniform_buffers(context: &VkContext) -> Result<Vec<VkBuffer<Uniforms>>, String> {
         (0..MAX_FRAMES_IN_FLIGHT)
-            .map(|_| UniformBuffer::new(context))
+            .map(|_| VkBuffer::host_visible(context, 1, vk::BufferUsageFlags::UNIFORM_BUFFER))
             .collect()
     }
 

@@ -1,7 +1,4 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
 
 use crate::material::Material;
 use crate::math::{Vec2, Vec3};
