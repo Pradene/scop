@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use crate::math::Vec3;
+use crate::math::{Vec2, Vec3};
 use crate::object::{FaceVertex, Group, Object};
 
 use super::MaterialParser;
@@ -44,6 +44,10 @@ impl ObjectParser {
                 "vn" => {
                     let v = Self::to_vec3(remainder).ok_or("Invalid normal coordinates")?;
                     object.normals.push(v);
+                }
+                "vt" => {
+                    let v = Self::to_vec2(remainder).ok_or("Invalid texture coordinates")?;
+                    object.textures.push(v);
                 }
                 "g" | "o" => {
                     if !current_group.is_empty() {
@@ -121,8 +125,13 @@ impl ObjectParser {
             };
 
             let texture_index = parse_sub_idx(1);
-            let normal_index = parse_sub_idx(2);
+            if let Some(idx) = texture_index {
+                if idx >= object.textures.len() {
+                    return Err(format!("Texture index {} out of bounds", idx + 1));
+                }
+            }
 
+            let normal_index = parse_sub_idx(2);
             if let Some(idx) = normal_index {
                 if idx >= object.normals.len() {
                     return Err(format!("Normal index {} out of bounds", idx + 1));
@@ -158,5 +167,14 @@ impl ObjectParser {
         let y = Self::to_f32(tokens[1])?;
         let z = Self::to_f32(tokens[2])?;
         Some(Vec3::new(x, y, z))
+    }
+
+    fn to_vec2(tokens: &[&str]) -> Option<Vec2> {
+        if tokens.len() != 2 {
+            return None;
+        }
+        let x = Self::to_f32(tokens[0])?;
+        let y = Self::to_f32(tokens[1])?;
+        Some(Vec2::new(x, y))
     }
 }

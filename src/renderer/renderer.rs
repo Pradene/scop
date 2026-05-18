@@ -180,7 +180,7 @@ impl Renderer {
         Ok(())
     }
 
-    fn update_uniform_buffer(&mut self, current_image: u32, scene: &Scene, camera: &Camera) {
+    fn update_uniform_buffer(&mut self, current_image: u32, camera: &Camera) {
         let ubo = Uniforms {
             view: camera.get_view_matrix(),
             proj: camera.get_projection_matrix(),
@@ -228,7 +228,7 @@ impl Renderer {
             Err(e) => return Err(format!("Failed to acquire next image: {:?}", e)),
         };
 
-        self.update_uniform_buffer(self.frame, scene, camera);
+        self.update_uniform_buffer(self.frame, camera);
 
         unsafe {
             self.context
@@ -250,7 +250,6 @@ impl Renderer {
         self.record_command_buffer(
             &self.command_pool.buffers[self.frame as usize],
             image_index,
-            scene,
         )?;
 
         let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].inner];
@@ -291,7 +290,6 @@ impl Renderer {
         &self,
         command_buffer: &vk::CommandBuffer,
         image_index: u32,
-        scene: &Scene,
     ) -> Result<(), String> {
         let begin_info = vk::CommandBufferBeginInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
@@ -377,12 +375,12 @@ impl Renderer {
             device
                 .inner
                 .cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::FRONT);
-            self.draw_meshes(&device.inner, command_buffer, scene);
+            self.draw_meshes(&device.inner, command_buffer);
 
             device
                 .inner
                 .cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::BACK);
-            self.draw_meshes(&device.inner, command_buffer, scene);
+            self.draw_meshes(&device.inner, command_buffer);
 
             device.inner.cmd_end_render_pass(*command_buffer);
 
@@ -395,8 +393,8 @@ impl Renderer {
         Ok(())
     }
 
-    fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer, scene: &Scene) {
-        for (mesh_idx, mesh) in self.meshes.iter().enumerate() {
+    fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer) {
+        for mesh in &self.meshes {
             let model_matrix = Mat4::identity();
             let vpc = VertexPushConstants {
                 model: model_matrix,
