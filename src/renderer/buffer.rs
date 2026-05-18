@@ -1,9 +1,9 @@
-use ash::vk;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::ffi::c_void;
 use super::find_memory_type;
 use super::{VkCommandPool, VkContext, VkDevice, VkQueue};
+use ash::vk;
+use std::ffi::c_void;
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 pub struct VkBuffer<T> {
     device: Arc<VkDevice>,
@@ -81,11 +81,13 @@ impl<T> VkBuffer<T> {
         let device = context.device();
         let size = (std::mem::size_of::<T>() * count) as u64;
 
-        let properties = vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+        let properties =
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
         let (inner, memory) = create_buffer(context, &size, &usage, &properties)?;
 
         let mapped = unsafe {
-            device.inner
+            device
+                .inner
                 .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())
                 .map_err(|e| format!("Failed to map host-visible buffer memory: {}", e))?
         };
@@ -103,11 +105,7 @@ impl<T> VkBuffer<T> {
     pub fn write(&self, data: &[T]) {
         let ptr = self.mapped.expect("Cannot write to a non-mapped buffer!");
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                data.as_ptr(), 
-                ptr as *mut T, 
-                data.len()
-            );
+            std::ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut T, data.len());
         }
     }
 }

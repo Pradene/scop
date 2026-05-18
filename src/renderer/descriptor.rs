@@ -3,7 +3,7 @@ use std::sync::Arc;
 use ash::vk;
 
 use super::MAX_FRAMES_IN_FLIGHT;
-use super::{VkBuffer, Uniforms, VkDevice};
+use super::{Uniforms, VkBuffer, VkDevice};
 
 pub struct VkDescriptorPool {
     device: Arc<VkDevice>,

@@ -3,9 +3,8 @@ use ash::vk;
 use super::query_swapchain_support;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
-    VkBuffer, Vertex, VkCommandPool, VkContext,
-    VkDescriptorPool, VkDescriptorSetLayout, VkFence, VkPipeline, VkQueue, VkRenderPass,
-    VkSemaphore, VkSwapchain,
+    Vertex, VkBuffer, VkCommandPool, VkContext, VkDescriptorPool, VkDescriptorSetLayout, VkFence,
+    VkPipeline, VkQueue, VkRenderPass, VkSemaphore, VkSwapchain,
 };
 use crate::camera::Camera;
 use crate::material::{Material, MaterialPushConstants};
@@ -256,10 +255,7 @@ impl Renderer {
                 .map_err(|e| format!("Failed to reset command buffer: {}", e))?;
         }
 
-        self.record_command_buffer(
-            &self.command_pool.buffers[self.frame as usize],
-            image_index,
-        )?;
+        self.record_command_buffer(&self.command_pool.buffers[self.frame as usize], image_index)?;
 
         let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].inner];
         let wait_semaphores = [self.image_available_semaphores[self.frame as usize].inner];
