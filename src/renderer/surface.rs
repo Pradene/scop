@@ -8,15 +8,15 @@ use super::VkInstance;
 
 pub struct VkSurface {
     pub loader: khr::surface::Instance,
-    pub inner: vk::SurfaceKHR,
+    pub handle: vk::SurfaceKHR,
 }
 
 impl VkSurface {
-    pub fn new(window: &Window, instance: &VkInstance) -> Result<VkSurface, String> {
-        let loader = khr::surface::Instance::new(&instance.entry, &instance.inner);
-        let inner = VkSurface::create_surface(window, &instance.entry, &instance.inner)?;
+    pub fn new(window: &Window, entry: &Entry, instance: &VkInstance) -> Result<VkSurface, String> {
+        let loader = khr::surface::Instance::new(entry, &instance.handle);
+        let handle = VkSurface::create_surface(window, entry, &instance.handle)?;
 
-        return Ok(VkSurface { loader, inner });
+        return Ok(VkSurface { loader, handle });
     }
 
     fn create_surface(
@@ -49,7 +49,7 @@ impl VkSurface {
 impl Drop for VkSurface {
     fn drop(&mut self) {
         unsafe {
-            self.loader.destroy_surface(self.inner, None);
+            self.loader.destroy_surface(self.handle, None);
         }
     }
 }

@@ -7,7 +7,7 @@ use super::{VkContext, VkDevice, VkImage, VkRenderPass};
 pub struct VkSwapchain {
     device: Arc<VkDevice>,
     pub loader: khr::swapchain::Device,
-    pub inner: vk::SwapchainKHR,
+    pub handle: vk::SwapchainKHR,
     pub images: Vec<vk::Image>,
     pub image_format: vk::Format,
     pub extent: vk::Extent2D,
@@ -47,8 +47,7 @@ impl VkSwapchain {
     ) -> Result<(), String> {
         self.device.wait_idle();
 
-        let old_handle = self.inner;
-
+        let old_swapchain = self.handle;
         let new_swapchain = Self::swapchain_create(
             context,
             render_pass,
@@ -56,11 +55,10 @@ impl VkSwapchain {
             surface_format,
             present_mode,
             extent,
-            old_handle,
+            old_swapchain,
         )?;
 
-        let mut old = std::mem::replace(self, new_swapchain);
-        old.inner = vk::SwapchainKHR::null();
+        let _ = std::mem::replace(self, new_swapchain);
 
         Ok(())
     }
@@ -82,7 +80,7 @@ impl VkSwapchain {
         let image_format = surface_format.format;
         let mut create_info = vk::SwapchainCreateInfoKHR {
             s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
-            surface: context.surface.inner,
+            surface: context.surface.handle,
             min_image_count: image_count,
             image_format,
             image_color_space: surface_format.color_space,
@@ -109,8 +107,9 @@ impl VkSwapchain {
             create_info.image_sharing_mode = vk::SharingMode::EXCLUSIVE;
         }
 
-        let loader = khr::swapchain::Device::new(&context.instance.inner, &context.device().inner);
-        let inner = unsafe {
+        let loader =
+            khr::swapchain::Device::new(&context.instance.handle, &context.device().handle);
+        let handle = unsafe {
             loader
                 .create_swapchain(&create_info, None)
                 .map_err(|e| format!("Failed to create swapchain: {}", e))?
@@ -118,11 +117,11 @@ impl VkSwapchain {
 
         let images = unsafe {
             loader
-                .get_swapchain_images(inner)
+                .get_swapchain_images(handle)
                 .map_err(|e| format!("Failed to get swapchain images: {}", e))?
         };
 
-        let image_views = Self::create_image_views(&context.device(), &images, image_format)?;
+        let image_views = Self::create_image_views(context.device(), &images, image_format)?;
 
         let depth_format = find_depth_format(&context.instance, &context.physical_device)?;
         let depth_image = VkImage::new(
@@ -142,7 +141,7 @@ impl VkSwapchain {
                 let attachments = [view, depth_image.view];
                 let create_info = vk::FramebufferCreateInfo {
                     s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
-                    render_pass: render_pass.inner,
+                    render_pass: render_pass.handle,
                     attachment_count: attachments.len() as u32,
                     p_attachments: attachments.as_ptr(),
                     width: extent.width,
@@ -153,7 +152,7 @@ impl VkSwapchain {
                 unsafe {
                     context
                         .device()
-                        .inner
+                        .handle
                         .create_framebuffer(&create_info, None)
                         .map_err(|e| format!("Failed to create framebuffer: {}", e))
                 }
@@ -163,7 +162,7 @@ impl VkSwapchain {
         Ok(VkSwapchain {
             device: context.device(),
             loader,
-            inner,
+            handle,
             images,
             image_format,
             extent,
@@ -174,7 +173,7 @@ impl VkSwapchain {
     }
 
     fn create_image_views(
-        device: &Arc<VkDevice>,
+        device: Arc<VkDevice>,
         images: &[vk::Image],
         format: vk::Format,
     ) -> Result<Vec<vk::ImageView>, String> {
@@ -197,7 +196,7 @@ impl VkSwapchain {
                 };
                 unsafe {
                     device
-                        .inner
+                        .handle
                         .create_image_view(&create_info, None)
                         .map_err(|e| format!("Failed to create image view: {}", e))
                 }
@@ -211,7 +210,7 @@ impl VkSwapchain {
         signal_semaphores: &[vk::Semaphore],
         image_index: u32,
     ) -> Result<bool, String> {
-        let swapchains = [self.inner];
+        let swapchains = [self.handle];
 
         let present_info = vk::PresentInfoKHR {
             s_type: vk::StructureType::PRESENT_INFO_KHR,
@@ -236,14 +235,14 @@ impl Drop for VkSwapchain {
     fn drop(&mut self) {
         unsafe {
             for framebuffer in self.framebuffers.drain(..) {
-                self.device.inner.destroy_framebuffer(framebuffer, None);
+                self.device.handle.destroy_framebuffer(framebuffer, None);
             }
             for view in self.image_views.drain(..) {
-                self.device.inner.destroy_image_view(view, None);
+                self.device.handle.destroy_image_view(view, None);
             }
-            if self.inner != vk::SwapchainKHR::null() {
-                self.loader.destroy_swapchain(self.inner, None);
-                self.inner = vk::SwapchainKHR::null();
+            if self.handle != vk::SwapchainKHR::null() {
+                self.loader.destroy_swapchain(self.handle, None);
+                self.handle = vk::SwapchainKHR::null();
             }
         }
     }

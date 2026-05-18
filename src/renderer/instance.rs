@@ -8,16 +8,14 @@ use winit::{raw_window_handle::HasDisplayHandle, window::Window};
 use super::{VALIDATION_LAYERS, VALIDATION_LAYERS_ENABLED};
 
 pub struct VkInstance {
-    pub entry: Entry,
-    pub inner: Instance,
+    pub handle: Instance,
 }
 
 impl VkInstance {
-    pub fn new(window: &Window) -> Result<VkInstance, String> {
-        let entry = Entry::linked();
-        let inner = VkInstance::create_instance(&entry, window)?;
+    pub fn new(entry: &Entry, window: &Window) -> Result<VkInstance, String> {
+        let handle = VkInstance::create_instance(&entry, window)?;
 
-        return Ok(VkInstance { entry, inner });
+        return Ok(VkInstance { handle });
     }
 
     fn check_validation_layer_support(entry: &Entry) -> bool {
@@ -106,7 +104,7 @@ impl VkInstance {
 impl Drop for VkInstance {
     fn drop(&mut self) {
         unsafe {
-            self.inner.destroy_instance(None);
+            self.handle.destroy_instance(None);
         }
     }
 }

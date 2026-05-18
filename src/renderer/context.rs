@@ -1,3 +1,4 @@
+use ash::Entry;
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -8,16 +9,19 @@ pub struct VkContext {
     pub physical_device: VkPhysicalDevice,
     pub surface: VkSurface,
     pub instance: VkInstance,
+    pub entry: Entry,
 }
 
 impl VkContext {
     pub fn new(window: &Window) -> Result<VkContext, String> {
-        let instance = VkInstance::new(window)?;
-        let surface = VkSurface::new(window, &instance)?;
+        let entry = Entry::linked();
+        let instance = VkInstance::new(&entry, window)?;
+        let surface = VkSurface::new(window, &entry, &instance)?;
         let physical_device = VkPhysicalDevice::new(&instance, &surface)?;
         let device = Arc::new(VkDevice::new(&instance, &physical_device)?);
 
         Ok(Self {
+            entry,
             instance,
             surface,
             physical_device,

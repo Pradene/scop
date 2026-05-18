@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 pub struct VkBuffer<T> {
     device: Arc<VkDevice>,
-    pub inner: vk::Buffer,
+    pub handle: vk::Buffer,
     pub size: vk::DeviceSize,
     pub memory: vk::DeviceMemory,
     pub mapped: Option<*mut c_void>,
@@ -34,36 +34,36 @@ impl<T: Copy> VkBuffer<T> {
 
         let data_ptr = unsafe {
             device
-                .inner
+                .handle
                 .map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())
                 .map_err(|e| format!("Failed to map staging buffer memory: {}", e))?
         };
 
         unsafe {
             std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr as *mut T, data.len());
-            device.inner.unmap_memory(staging_buffer_memory);
+            device.handle.unmap_memory(staging_buffer_memory);
         }
 
         let target_properties = vk::MemoryPropertyFlags::DEVICE_LOCAL;
-        let (inner, memory) = create_buffer(context, &size, &usage, &target_properties)?;
+        let (handle, memory) = create_buffer(context, &size, &usage, &target_properties)?;
 
         copy_buffer(
             &device,
             command_pool,
             &queue,
             &staging_buffer,
-            &inner,
+            &handle,
             &size,
         )?;
 
         unsafe {
-            device.inner.destroy_buffer(staging_buffer, None);
-            device.inner.free_memory(staging_buffer_memory, None);
+            device.handle.destroy_buffer(staging_buffer, None);
+            device.handle.free_memory(staging_buffer_memory, None);
         }
 
         Ok(VkBuffer {
             device,
-            inner,
+            handle,
             size,
             memory,
             mapped: None,
@@ -83,18 +83,18 @@ impl<T> VkBuffer<T> {
 
         let properties =
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
-        let (inner, memory) = create_buffer(context, &size, &usage, &properties)?;
+        let (handle, memory) = create_buffer(context, &size, &usage, &properties)?;
 
         let mapped = unsafe {
             device
-                .inner
+                .handle
                 .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())
                 .map_err(|e| format!("Failed to map host-visible buffer memory: {}", e))?
         };
 
         Ok(Self {
             device,
-            inner,
+            handle,
             size,
             memory,
             mapped: Some(mapped),
@@ -114,10 +114,10 @@ impl<T> Drop for VkBuffer<T> {
     fn drop(&mut self) {
         unsafe {
             if self.mapped.is_some() {
-                self.device.inner.unmap_memory(self.memory);
+                self.device.handle.unmap_memory(self.memory);
             }
-            self.device.inner.free_memory(self.memory, None);
-            self.device.inner.destroy_buffer(self.inner, None);
+            self.device.handle.free_memory(self.memory, None);
+            self.device.handle.destroy_buffer(self.handle, None);
         }
     }
 }
@@ -139,12 +139,12 @@ pub fn create_buffer(
 
     let buffer = unsafe {
         device
-            .inner
+            .handle
             .create_buffer(&create_info, None)
             .map_err(|e| format!("Failed to create buffer: {}", e))?
     };
 
-    let memory_requirements = unsafe { device.inner.get_buffer_memory_requirements(buffer) };
+    let memory_requirements = unsafe { device.handle.get_buffer_memory_requirements(buffer) };
 
     let memory_type_index =
         find_memory_type(context, memory_requirements.memory_type_bits, *properties)?;
@@ -158,14 +158,14 @@ pub fn create_buffer(
 
     let buffer_memory = unsafe {
         device
-            .inner
+            .handle
             .allocate_memory(&allocate_info, None)
             .map_err(|e| format!("Failed to allocate buffer memory: {}", e))?
     };
 
     unsafe {
         device
-            .inner
+            .handle
             .bind_buffer_memory(buffer, buffer_memory, 0)
             .map_err(|e| format!("Failed to bind buffer memory: {}", e))?
     };
@@ -184,14 +184,14 @@ fn copy_buffer(
     let allocate_info = vk::CommandBufferAllocateInfo {
         s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
         level: vk::CommandBufferLevel::PRIMARY,
-        command_pool: command_pool.inner,
+        command_pool: command_pool.handle,
         command_buffer_count: 1,
         ..Default::default()
     };
 
     let mut buffers = unsafe {
         device
-            .inner
+            .handle
             .allocate_command_buffers(&allocate_info)
             .map_err(|e| format!("Failed to allocate staging command buffer: {}", e))?
     };
@@ -209,7 +209,7 @@ fn copy_buffer(
 
     unsafe {
         device
-            .inner
+            .handle
             .begin_command_buffer(command_buffer, &begin_info)
             .map_err(|e| format!("Failed to begin recording command buffer: {}", e))?
     };
@@ -222,11 +222,11 @@ fn copy_buffer(
 
     unsafe {
         device
-            .inner
+            .handle
             .cmd_copy_buffer(command_buffer, *src, *dst, &[copy_region]);
 
         device
-            .inner
+            .handle
             .end_command_buffer(command_buffer)
             .map_err(|e| format!("Failed to end command buffer recording: {}", e))?;
     };
@@ -240,18 +240,18 @@ fn copy_buffer(
 
     unsafe {
         device
-            .inner
-            .queue_submit(queue.inner, &[submit_info], vk::Fence::null())
+            .handle
+            .queue_submit(queue.handle, &[submit_info], vk::Fence::null())
             .map_err(|e| format!("Failed to submit copy queue commands: {}", e))?;
 
         device
-            .inner
-            .queue_wait_idle(queue.inner)
+            .handle
+            .queue_wait_idle(queue.handle)
             .map_err(|e| format!("Failed waiting for queue idle on copy: {}", e))?;
 
         device
-            .inner
-            .free_command_buffers(command_pool.inner, &[command_buffer]);
+            .handle
+            .free_command_buffers(command_pool.handle, &[command_buffer]);
     };
 
     Ok(())

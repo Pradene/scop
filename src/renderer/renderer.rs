@@ -37,6 +37,7 @@ pub struct Renderer {
 
     // Commands
     pub command_pool: VkCommandPool,
+    pub command_buffers: Vec<vk::CommandBuffer>,
 
     // Swapchain
     pub swapchain: VkSwapchain,
@@ -69,9 +70,9 @@ impl Renderer {
         let present_queue = VkQueue::new(context.device(), context.present_family());
 
         let support_details = query_swapchain_support(
-            &context.physical_device.inner,
+            &context.physical_device.handle,
             &context.surface.loader,
-            &context.surface.inner,
+            &context.surface.handle,
         )?;
 
         let capabilities = support_details.capabilities;
@@ -93,7 +94,14 @@ impl Renderer {
 
         let descriptor_set_layout = VkDescriptorSetLayout::new(context.device())?;
         let pipeline = VkPipeline::new(context.device(), &render_pass, &descriptor_set_layout)?;
-        let command_pool = VkCommandPool::new(&context.physical_device, context.device())?;
+        let command_pool = VkCommandPool::new(
+            context.device(),
+            context.graphics_family(),
+            vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+        )?;
+
+        let command_buffers =
+            command_pool.allocate_buffers(vk::CommandBufferLevel::PRIMARY, MAX_FRAMES_IN_FLIGHT)?;
 
         let uniform_buffers = Renderer::create_uniform_buffers(&context)?;
 
@@ -119,6 +127,7 @@ impl Renderer {
             render_pass,
             pipeline,
             command_pool,
+            command_buffers,
             frame: 0,
             start: std::time::Instant::now(),
             meshes: Vec::new(),
@@ -205,12 +214,12 @@ impl Renderer {
     }
 
     pub fn draw(&mut self, window: &Window, _scene: &Scene, camera: &Camera) -> Result<(), String> {
+        let device = self.context.device();
         unsafe {
-            self.context
-                .device()
-                .inner
+            device
+                .handle
                 .wait_for_fences(
-                    &[self.in_flight_fences[self.frame as usize].inner],
+                    &[self.in_flight_fences[self.frame as usize].handle],
                     true,
                     u64::MAX,
                 )
@@ -219,9 +228,9 @@ impl Renderer {
 
         let acquire_result = unsafe {
             self.swapchain.loader.acquire_next_image(
-                self.swapchain.inner,
+                self.swapchain.handle,
                 u64::MAX,
-                self.image_available_semaphores[self.frame as usize].inner,
+                self.image_available_semaphores[self.frame as usize].handle,
                 vk::Fence::null(),
             )
         };
@@ -246,38 +255,36 @@ impl Renderer {
         self.update_uniform_buffer(self.frame, camera);
 
         unsafe {
-            self.context
-                .device()
-                .inner
-                .reset_fences(&[self.in_flight_fences[self.frame as usize].inner])
+            device
+                .handle
+                .reset_fences(&[self.in_flight_fences[self.frame as usize].handle])
                 .map_err(|e| format!("Failed to reset fence: {}", e))?;
 
-            self.context
-                .device()
-                .inner
+            device
+                .handle
                 .reset_command_buffer(
-                    self.command_pool.buffers[self.frame as usize],
+                    self.command_buffers[self.frame as usize],
                     vk::CommandBufferResetFlags::empty(),
                 )
                 .map_err(|e| format!("Failed to reset command buffer: {}", e))?;
         }
 
-        self.record_command_buffer(&self.command_pool.buffers[self.frame as usize], image_index)?;
+        self.record_command_buffer(&self.command_buffers[self.frame as usize], image_index)?;
 
-        let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].inner];
-        let wait_semaphores = [self.image_available_semaphores[self.frame as usize].inner];
+        let signal_semaphores = [self.render_finished_semaphores[self.frame as usize].handle];
+        let wait_semaphores = [self.image_available_semaphores[self.frame as usize].handle];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
         self.graphics_queue.submit(
-            &self.command_pool.buffers[self.frame as usize],
+            &self.command_buffers[self.frame as usize],
             &wait_semaphores,
             &signal_semaphores,
             &wait_stages,
-            &self.in_flight_fences[self.frame as usize].inner,
+            &self.in_flight_fences[self.frame as usize].handle,
         );
 
         match self.swapchain.queue_present(
-            &self.present_queue.inner,
+            &self.present_queue.handle,
             &signal_semaphores,
             image_index,
         ) {
@@ -324,7 +331,7 @@ impl Renderer {
 
         let render_pass_info = vk::RenderPassBeginInfo {
             s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
-            render_pass: self.render_pass.inner,
+            render_pass: self.render_pass.handle,
             framebuffer: self.swapchain.framebuffers[image_index as usize],
             render_area: vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
@@ -352,28 +359,30 @@ impl Renderer {
         unsafe {
             let device = self.context.device();
             device
-                .inner
+                .handle
                 .begin_command_buffer(*command_buffer, &begin_info)
                 .map_err(|e| format!("Failed to begin command buffer: {}", e))?;
 
-            device.inner.cmd_begin_render_pass(
+            device.handle.cmd_begin_render_pass(
                 *command_buffer,
                 &render_pass_info,
                 vk::SubpassContents::INLINE,
             );
 
-            device.inner.cmd_bind_pipeline(
+            device.handle.cmd_bind_pipeline(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline.inner,
+                self.pipeline.handle,
             );
 
             device
-                .inner
+                .handle
                 .cmd_set_viewport(*command_buffer, 0, &[viewport]);
-            device.inner.cmd_set_scissor(*command_buffer, 0, &[scissor]);
+            device
+                .handle
+                .cmd_set_scissor(*command_buffer, 0, &[scissor]);
 
-            device.inner.cmd_bind_descriptor_sets(
+            device.handle.cmd_bind_descriptor_sets(
                 *command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline.layout,
@@ -385,19 +394,19 @@ impl Renderer {
             // Two rendering for transparent object
             // Draw back -> front
             device
-                .inner
+                .handle
                 .cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::FRONT);
-            self.draw_meshes(&device.inner, command_buffer);
+            self.draw_meshes(&device.handle, command_buffer);
 
             device
-                .inner
+                .handle
                 .cmd_set_cull_mode(*command_buffer, vk::CullModeFlags::BACK);
-            self.draw_meshes(&device.inner, command_buffer);
+            self.draw_meshes(&device.handle, command_buffer);
 
-            device.inner.cmd_end_render_pass(*command_buffer);
+            device.handle.cmd_end_render_pass(*command_buffer);
 
             device
-                .inner
+                .handle
                 .end_command_buffer(*command_buffer)
                 .map_err(|e| format!("Failed to end command buffer: {}", e))?;
         }
@@ -424,10 +433,10 @@ impl Renderer {
                     ),
                 );
 
-                device.cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.inner], &[0]);
+                device.cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.handle], &[0]);
                 device.cmd_bind_index_buffer(
                     *cmd,
-                    mesh.index_buffer.inner,
+                    mesh.index_buffer.handle,
                     0,
                     vk::IndexType::UINT32,
                 );
@@ -465,9 +474,9 @@ impl Renderer {
         self.wait_idle();
 
         let support_details = query_swapchain_support(
-            &self.context.physical_device.inner,
+            &self.context.physical_device.handle,
             &self.context.surface.loader,
-            &self.context.surface.inner,
+            &self.context.surface.handle,
         )?;
 
         self.swapchain.resize(

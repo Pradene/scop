@@ -8,21 +8,21 @@ use super::DEVICE_EXTENSIONS;
 use super::{QueueFamiliesIndices, SwapChainSupportDetails, VkInstance, VkSurface};
 
 pub struct VkPhysicalDevice {
-    pub inner: vk::PhysicalDevice,
+    pub handle: vk::PhysicalDevice,
     pub queue_families: QueueFamiliesIndices,
     pub swapchain_support: SwapChainSupportDetails,
 }
 
 impl VkPhysicalDevice {
     pub fn new(instance: &VkInstance, surface: &VkSurface) -> Result<VkPhysicalDevice, String> {
-        let (inner, queue_families, swapchain_support) = VkPhysicalDevice::choose_physical_device(
-            &instance.inner,
+        let (handle, queue_families, swapchain_support) = VkPhysicalDevice::choose_physical_device(
+            &instance.handle,
             &surface.loader,
-            &surface.inner,
+            &surface.handle,
         )?;
 
         return Ok(VkPhysicalDevice {
-            inner,
+            handle,
             queue_families,
             swapchain_support,
         });
@@ -59,19 +59,20 @@ impl VkPhysicalDevice {
             ),
         > = BTreeMap::new();
 
-        for inner in physical_devices {
+        for handle in physical_devices {
             let (score, queue_families) =
-                Self::rate_device(instance, surface_loader, surface, &inner)?;
+                Self::rate_device(instance, surface_loader, surface, &handle)?;
 
             let swapchain_support;
-            match query_swapchain_support(&inner, surface_loader, surface) {
+            match query_swapchain_support(&handle, surface_loader, surface) {
                 Ok(value) => swapchain_support = value,
                 Err(e) => return Err(format!("Swapchain not supported: {}", e)),
             }
 
             if score > 0 {
-                if Self::is_device_suitable(instance, &inner, &queue_families, &swapchain_support) {
-                    candidates.insert(score, (inner, queue_families, swapchain_support));
+                if Self::is_device_suitable(instance, &handle, &queue_families, &swapchain_support)
+                {
+                    candidates.insert(score, (handle, queue_families, swapchain_support));
                 }
             }
         }
@@ -88,11 +89,11 @@ impl VkPhysicalDevice {
         instance: &Instance,
         surface_loader: &khr::surface::Instance,
         surface: &vk::SurfaceKHR,
-        inner: &vk::PhysicalDevice,
+        handle: &vk::PhysicalDevice,
     ) -> Result<(i32, QueueFamiliesIndices), String> {
-        let properties = unsafe { instance.get_physical_device_properties(*inner) };
-        let features = unsafe { instance.get_physical_device_features(*inner) };
-        let queue_families = Self::find_queue_families(instance, &inner, surface_loader, surface);
+        let properties = unsafe { instance.get_physical_device_properties(*handle) };
+        let features = unsafe { instance.get_physical_device_features(*handle) };
+        let queue_families = Self::find_queue_families(instance, &handle, surface_loader, surface);
 
         let mut score = 0;
 
@@ -111,13 +112,13 @@ impl VkPhysicalDevice {
 
     fn is_device_suitable(
         instance: &Instance,
-        inner: &vk::PhysicalDevice,
+        handle: &vk::PhysicalDevice,
         queue_families: &QueueFamiliesIndices,
         swapchain_support: &SwapChainSupportDetails,
     ) -> bool {
         let device_extensions = unsafe {
             instance
-                .enumerate_device_extension_properties(*inner)
+                .enumerate_device_extension_properties(*handle)
                 .map_err(|e| format!("{}", e))
                 .unwrap_or_default()
         };
@@ -140,7 +141,7 @@ impl VkPhysicalDevice {
 
     fn find_queue_families(
         instance: &Instance,
-        inner: &vk::PhysicalDevice,
+        handle: &vk::PhysicalDevice,
         surface_loader: &khr::surface::Instance,
         surface: &vk::SurfaceKHR,
     ) -> QueueFamiliesIndices {
@@ -148,7 +149,7 @@ impl VkPhysicalDevice {
         let mut present_family = None;
 
         let queue_families =
-            unsafe { instance.get_physical_device_queue_family_properties(*inner) };
+            unsafe { instance.get_physical_device_queue_family_properties(*handle) };
 
         for (index, queue_family) in queue_families.iter().enumerate() {
             let index = index as u32;
@@ -160,7 +161,7 @@ impl VkPhysicalDevice {
 
             let present_support = unsafe {
                 surface_loader
-                    .get_physical_device_surface_support(*inner, index, *surface)
+                    .get_physical_device_surface_support(*handle, index, *surface)
                     .unwrap()
             };
 

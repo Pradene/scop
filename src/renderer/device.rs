@@ -4,7 +4,7 @@ use crate::renderer::{VkInstance, VkPhysicalDevice};
 use ash::{vk, Device};
 
 pub struct VkDevice {
-    pub inner: Device,
+    pub handle: Device,
 }
 
 impl VkDevice {
@@ -51,19 +51,19 @@ impl VkDevice {
             ..Default::default()
         };
 
-        let inner = unsafe {
+        let handle = unsafe {
             instance
-                .inner
-                .create_device(physical_device.inner, &create_info, None)
+                .handle
+                .create_device(physical_device.handle, &create_info, None)
                 .map_err(|e| format!("Failed to create logical device: {}", e))?
         };
 
-        return Ok(VkDevice { inner });
+        return Ok(VkDevice { handle });
     }
 
     pub fn wait_idle(&self) {
         unsafe {
-            let _ = self.inner.device_wait_idle();
+            let _ = self.handle.device_wait_idle();
         }
     }
 }
@@ -71,7 +71,7 @@ impl VkDevice {
 impl Drop for VkDevice {
     fn drop(&mut self) {
         unsafe {
-            self.inner.destroy_device(None);
+            self.handle.destroy_device(None);
         }
     }
 }

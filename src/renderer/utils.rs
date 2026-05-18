@@ -10,25 +10,25 @@ pub struct SwapChainSupportDetails {
 }
 
 pub fn query_swapchain_support(
-    inner: &vk::PhysicalDevice,
+    handle: &vk::PhysicalDevice,
     surface_loader: &khr::surface::Instance,
     surface: &vk::SurfaceKHR,
 ) -> Result<SwapChainSupportDetails, String> {
     let capabilities = unsafe {
         surface_loader
-            .get_physical_device_surface_capabilities(*inner, *surface)
+            .get_physical_device_surface_capabilities(*handle, *surface)
             .map_err(|e| format!("Failed to get surface capabilities: {}", e))?
     };
 
     let formats = unsafe {
         surface_loader
-            .get_physical_device_surface_formats(*inner, *surface)
+            .get_physical_device_surface_formats(*handle, *surface)
             .map_err(|e| format!("Failed to get surface formats: {}", e))?
     };
 
     let present_modes = unsafe {
         surface_loader
-            .get_physical_device_surface_present_modes(*inner, *surface)
+            .get_physical_device_surface_present_modes(*handle, *surface)
             .map_err(|e| format!("Failed to get surface present modes: {}", e))?
     };
 
@@ -51,8 +51,8 @@ pub fn find_depth_format(
     for format in candidates {
         let props = unsafe {
             instance
-                .inner
-                .get_physical_device_format_properties(physical_device.inner, format)
+                .handle
+                .get_physical_device_format_properties(physical_device.handle, format)
         };
         if (props.optimal_tiling_features & vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
             == vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT
@@ -71,8 +71,8 @@ pub fn find_memory_type(
     let memory_properties = unsafe {
         context
             .instance
-            .inner
-            .get_physical_device_memory_properties(context.physical_device.inner)
+            .handle
+            .get_physical_device_memory_properties(context.physical_device.handle)
     };
 
     for index in 0..memory_properties.memory_type_count {

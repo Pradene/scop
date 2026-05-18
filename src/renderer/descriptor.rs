@@ -7,7 +7,7 @@ use super::{Uniforms, VkBuffer, VkDevice};
 
 pub struct VkDescriptorPool {
     device: Arc<VkDevice>,
-    pub inner: vk::DescriptorPool,
+    pub handle: vk::DescriptorPool,
 }
 
 impl VkDescriptorPool {
@@ -25,14 +25,14 @@ impl VkDescriptorPool {
             ..Default::default()
         };
 
-        let inner = unsafe {
+        let handle = unsafe {
             device
-                .inner
+                .handle
                 .create_descriptor_pool(&create_info, None)
                 .map_err(|e| format!("Failed to create descriptor pool: {}", e))?
         };
 
-        return Ok(VkDescriptorPool { device, inner });
+        return Ok(VkDescriptorPool { device, handle });
     }
 
     pub fn create_sets(
@@ -40,11 +40,11 @@ impl VkDescriptorPool {
         set_layout: &VkDescriptorSetLayout,
         uniform_buffers: &Vec<VkBuffer<Uniforms>>,
     ) -> Result<Vec<vk::DescriptorSet>, String> {
-        let layouts = vec![set_layout.inner; MAX_FRAMES_IN_FLIGHT as usize];
+        let layouts = vec![set_layout.handle; MAX_FRAMES_IN_FLIGHT as usize];
 
         let allocate_info = vk::DescriptorSetAllocateInfo {
             s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
-            descriptor_pool: self.inner,
+            descriptor_pool: self.handle,
             descriptor_set_count: MAX_FRAMES_IN_FLIGHT,
             p_set_layouts: layouts.as_ptr(),
             ..Default::default()
@@ -52,14 +52,14 @@ impl VkDescriptorPool {
 
         let descriptor_sets = unsafe {
             self.device
-                .inner
+                .handle
                 .allocate_descriptor_sets(&allocate_info)
                 .map_err(|e| format!("Failed to allocate descriptor sets: {}", e))?
         };
 
         for index in 0..MAX_FRAMES_IN_FLIGHT {
             let buffer_info = vk::DescriptorBufferInfo {
-                buffer: uniform_buffers[index as usize].inner,
+                buffer: uniform_buffers[index as usize].handle,
                 offset: 0,
                 range: std::mem::size_of::<Uniforms>() as u64,
             };
@@ -77,7 +77,7 @@ impl VkDescriptorPool {
 
             unsafe {
                 self.device
-                    .inner
+                    .handle
                     .update_descriptor_sets(&[descriptor_write], &[])
             };
         }
@@ -89,14 +89,16 @@ impl VkDescriptorPool {
 impl Drop for VkDescriptorPool {
     fn drop(&mut self) {
         unsafe {
-            self.device.inner.destroy_descriptor_pool(self.inner, None);
+            self.device
+                .handle
+                .destroy_descriptor_pool(self.handle, None);
         }
     }
 }
 
 pub struct VkDescriptorSetLayout {
     device: Arc<VkDevice>,
-    pub inner: vk::DescriptorSetLayout,
+    pub handle: vk::DescriptorSetLayout,
 }
 
 impl VkDescriptorSetLayout {
@@ -117,14 +119,14 @@ impl VkDescriptorSetLayout {
             ..Default::default()
         };
 
-        let inner = unsafe {
+        let handle = unsafe {
             device
-                .inner
+                .handle
                 .create_descriptor_set_layout(&create_info, None)
                 .map_err(|e| format!("Failed to create descriptor set layout: {}", e))?
         };
 
-        return Ok(VkDescriptorSetLayout { device, inner });
+        return Ok(VkDescriptorSetLayout { device, handle });
     }
 }
 
@@ -132,8 +134,8 @@ impl Drop for VkDescriptorSetLayout {
     fn drop(&mut self) {
         unsafe {
             self.device
-                .inner
-                .destroy_descriptor_set_layout(self.inner, None);
+                .handle
+                .destroy_descriptor_set_layout(self.handle, None);
         }
     }
 }

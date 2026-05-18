@@ -6,7 +6,7 @@ use super::{VkContext, VkDevice};
 
 pub struct VkImage {
     device: Arc<VkDevice>,
-    pub inner: vk::Image,
+    pub handle: vk::Image,
     pub memory: vk::DeviceMemory,
     pub view: vk::ImageView,
     pub format: vk::Format,
@@ -44,14 +44,14 @@ impl VkImage {
             ..Default::default()
         };
 
-        let inner = unsafe {
+        let handle = unsafe {
             device
-                .inner
+                .handle
                 .create_image(&create_info, None)
                 .map_err(|e| format!("Failed to create image: {}", e))?
         };
 
-        let memory_requirements = unsafe { device.inner.get_image_memory_requirements(inner) };
+        let memory_requirements = unsafe { device.handle.get_image_memory_requirements(handle) };
         let memory_type =
             find_memory_type(context, memory_requirements.memory_type_bits, properties)?;
 
@@ -64,21 +64,21 @@ impl VkImage {
 
         let memory = unsafe {
             device
-                .inner
+                .handle
                 .allocate_memory(&allocate_info, None)
                 .map_err(|e| format!("Failed to allocate image memory: {}", e))?
         };
 
         unsafe {
             device
-                .inner
-                .bind_image_memory(inner, memory, 0)
+                .handle
+                .bind_image_memory(handle, memory, 0)
                 .map_err(|e| format!("Failed to bind memory to image: {}", e))?
         };
 
         let view_create_info = vk::ImageViewCreateInfo {
             s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-            image: inner,
+            image: handle,
             view_type: vk::ImageViewType::TYPE_2D,
             format,
             subresource_range: vk::ImageSubresourceRange {
@@ -93,14 +93,14 @@ impl VkImage {
 
         let view = unsafe {
             device
-                .inner
+                .handle
                 .create_image_view(&view_create_info, None)
                 .map_err(|e| format!("Failed to create image view: {}", e))?
         };
 
         Ok(Self {
             device,
-            inner,
+            handle,
             memory,
             view,
             format,
@@ -111,9 +111,9 @@ impl VkImage {
 impl Drop for VkImage {
     fn drop(&mut self) {
         unsafe {
-            self.device.inner.destroy_image_view(self.view, None);
-            self.device.inner.free_memory(self.memory, None);
-            self.device.inner.destroy_image(self.inner, None);
+            self.device.handle.destroy_image_view(self.view, None);
+            self.device.handle.free_memory(self.memory, None);
+            self.device.handle.destroy_image(self.handle, None);
         }
     }
 }
