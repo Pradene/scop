@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 
-use crate::material::Material;
-use crate::math::{Vec2, Vec3};
+use super::Material;
+use crate::math::{Mat4, Vec2, Vec3};
 use crate::parser::ObjectParser;
 use crate::renderer::Vertex;
+
+pub struct ModelPushConstants {
+    pub model: Mat4,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FaceVertex {

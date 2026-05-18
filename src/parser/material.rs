@@ -3,8 +3,8 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use crate::material::Material;
 use crate::math::Vec3;
+use crate::scene::Material;
 
 pub struct MaterialParser;
 

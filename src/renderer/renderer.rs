@@ -3,30 +3,17 @@ use ash::vk;
 use super::query_swapchain_support;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
-    Vertex, VkBuffer, VkCommandPool, VkContext, VkDescriptorPool, VkDescriptorSetLayout, VkFence,
+    VkBuffer, VkCommandPool, VkContext, VkDescriptorPool, VkDescriptorSetLayout, VkFence,
     VkPipeline, VkQueue, VkRenderPass, VkSemaphore, VkSwapchain,
 };
 use crate::camera::Camera;
-use crate::material::{Material, MaterialPushConstants};
 use crate::math::Mat4;
-use crate::object::Object;
+use crate::scene::ModelPushConstants;
 use crate::scene::Scene;
+use crate::scene::{MaterialPushConstants, Object};
+use crate::scene::{Mesh, SubMesh};
 
 use winit::window::Window;
-
-pub struct GpuGroup {
-    pub vertex_buffer: VkBuffer<Vertex>,
-    pub index_buffer: VkBuffer<u32>,
-    pub material: Material,
-}
-
-pub struct GpuMesh {
-    pub groups: Vec<GpuGroup>,
-}
-
-pub struct VertexPushConstants {
-    pub model: Mat4,
-}
 
 pub struct Uniforms {
     pub view: Mat4,
@@ -46,7 +33,7 @@ pub struct Renderer {
 
     // Buffers
     pub uniform_buffers: Vec<VkBuffer<Uniforms>>,
-    meshes: Vec<GpuMesh>,
+    meshes: Vec<Mesh>,
 
     // Commands
     pub command_pool: VkCommandPool,
@@ -146,13 +133,20 @@ impl Renderer {
     }
 
     pub fn upload_mesh(&mut self, object: &Object) -> Result<(), String> {
-        let mut groups = Vec::new();
+        let mut all_vertices = Vec::new();
+        let mut all_indices = Vec::new();
+        let mut primitives = Vec::new();
 
         for group in &object.groups {
             let (vertices, indices) = object.get_group_vertices_and_indices(group);
             if indices.is_empty() {
                 continue;
             }
+
+            let index_offset = all_indices.len() as u32;
+            let index_count = indices.len() as u32;
+
+            let vertex_offset = all_vertices.len() as i32;
 
             let material = group
                 .material
@@ -161,29 +155,42 @@ impl Renderer {
                 .cloned()
                 .unwrap_or_default();
 
-            let vertex_buffer = VkBuffer::device_local(
-                &self.context,
-                &self.graphics_queue,
-                &self.command_pool,
-                &vertices,
-                vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
-            )?;
-            let index_buffer = VkBuffer::device_local(
-                &self.context,
-                &self.graphics_queue,
-                &self.command_pool,
-                &indices,
-                vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
-            )?;
+            all_vertices.extend_from_slice(&vertices);
+            all_indices.extend_from_slice(&indices);
 
-            groups.push(GpuGroup {
-                vertex_buffer,
-                index_buffer,
+            primitives.push(SubMesh {
+                index_offset,
+                index_count,
+                vertex_offset,
                 material,
             });
         }
 
-        self.meshes.push(GpuMesh { groups });
+        if all_vertices.is_empty() || all_indices.is_empty() {
+            return Ok(());
+        }
+
+        let vertex_buffer = VkBuffer::device_local(
+            &self.context,
+            &self.graphics_queue,
+            &self.command_pool,
+            &all_vertices,
+            vk::BufferUsageFlags::VERTEX_BUFFER,
+        )?;
+
+        let index_buffer = VkBuffer::device_local(
+            &self.context,
+            &self.graphics_queue,
+            &self.command_pool,
+            &all_indices,
+            vk::BufferUsageFlags::INDEX_BUFFER,
+        )?;
+
+        self.meshes.push(Mesh {
+            vertex_buffer,
+            index_buffer,
+            primitives,
+        });
 
         Ok(())
     }
@@ -401,24 +408,35 @@ impl Renderer {
     fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer) {
         for mesh in &self.meshes {
             let model_matrix = Mat4::identity();
-            let vpc = VertexPushConstants {
+            let vpc = ModelPushConstants {
                 model: model_matrix,
             };
 
-            for group in &mesh.groups {
-                let fpc = MaterialPushConstants::from_material(&group.material);
+            unsafe {
+                device.cmd_push_constants(
+                    *cmd,
+                    self.pipeline.layout,
+                    vk::ShaderStageFlags::VERTEX,
+                    0,
+                    std::slice::from_raw_parts(
+                        &vpc as *const _ as *const u8,
+                        std::mem::size_of::<ModelPushConstants>(),
+                    ),
+                );
+
+                device.cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.inner], &[0]);
+                device.cmd_bind_index_buffer(
+                    *cmd,
+                    mesh.index_buffer.inner,
+                    0,
+                    vk::IndexType::UINT32,
+                );
+            }
+
+            for submesh in &mesh.primitives {
+                let fpc = MaterialPushConstants::from_material(&submesh.material);
 
                 unsafe {
-                    device.cmd_push_constants(
-                        *cmd,
-                        self.pipeline.layout,
-                        vk::ShaderStageFlags::VERTEX,
-                        0,
-                        std::slice::from_raw_parts(
-                            &vpc as *const _ as *const u8,
-                            std::mem::size_of::<VertexPushConstants>(),
-                        ),
-                    );
                     device.cmd_push_constants(
                         *cmd,
                         self.pipeline.layout,
@@ -430,17 +448,14 @@ impl Renderer {
                         ),
                     );
 
-                    device.cmd_bind_vertex_buffers(*cmd, 0, &[group.vertex_buffer.inner], &[0]);
-                    device.cmd_bind_index_buffer(
+                    device.cmd_draw_indexed(
                         *cmd,
-                        group.index_buffer.inner,
+                        submesh.index_count,
+                        1,
+                        submesh.index_offset,
+                        submesh.vertex_offset,
                         0,
-                        vk::IndexType::UINT32,
                     );
-
-                    let index_count =
-                        (group.index_buffer.size / std::mem::size_of::<u32>() as u64) as u32;
-                    device.cmd_draw_indexed(*cmd, index_count, 1, 0, 0, 0);
                 }
             }
         }

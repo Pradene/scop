@@ -1,5 +1,5 @@
 use scop::camera::Camera;
-use scop::object::Object;
+use scop::scene::Object;
 use scop::scene::Scene;
 use scop::WINDOW_HEIGHT;
 use scop::{app::App, WINDOW_WIDTH};

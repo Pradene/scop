@@ -1,4 +1,4 @@
-use crate::object::Object;
+use super::Object;
 
 pub struct Scene {
     pub objects: Vec<Object>,

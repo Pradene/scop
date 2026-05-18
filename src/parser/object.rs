@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use crate::math::{Vec2, Vec3};
-use crate::object::{FaceVertex, Group, Object};
+use crate::scene::{FaceVertex, Group, Object};
 
 use super::MaterialParser;
 
