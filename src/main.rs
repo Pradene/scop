@@ -1,34 +1,78 @@
+use std::time::Duration;
 use scop::camera::Camera;
+use scop::renderer::Renderer;
 use scop::scene::Object;
 use scop::scene::Scene;
-use scop::WINDOW_HEIGHT;
-use scop::{app::App, WINDOW_WIDTH};
-
 use scop::math::Vec3;
-
-use winit::event_loop::{ControlFlow, EventLoop};
+use sdl3::event::{Event, WindowEvent};
+use sdl3::keyboard::Keycode;
 
 fn main() -> Result<(), String> {
-    let event_loop = EventLoop::new().map_err(|e| format!("Failed to create event loop: {}", e))?;
-    event_loop.set_control_flow(ControlFlow::Poll);
+    let sdl_context = sdl3::init()
+        .map_err(|e| format!("Failed to create sdl context: {}", e))?;
+    let video_subsystem = sdl_context
+        .video()
+        .map_err(|e| format!("Failed to create video subsystem: {}", e))?;
 
-    let camera = Camera::new(
+    let width = 600u32;
+    let height = 400u32;
+
+    let window = video_subsystem
+        .window("scop", width, height)
+        .position_centered()
+        .vulkan()
+        .resizable()
+        .build()
+        .map_err(|e| format!("Failed to create window: {}", e))?;
+
+    let mut camera = Camera::new(
         Vec3::Z * 200.,
         Vec3::Z * -1.,
         45f32.to_radians(),
-        WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32,
+        width as f32 / height as f32,
         0.1,
         500.,
     );
 
-    let mut scene = Scene::new();
+    let mut renderer = Renderer::new(&window)
+        .map_err(|e| format!("Failed to create renderer: {}", e))?;
 
-    let object = Object::parse("assets/teapot.obj").unwrap();
+    let mut scene = Scene::new();
+    let object = Object::parse("assets/teapot.obj")
+        .map_err(|e| format!("Failed to parse object: {}", e))?;
+    let _ = renderer.upload_mesh(&object);
     scene.add(object);
 
-    let mut app = App::new(scene, camera);
+    let mut event_pump = sdl_context.event_pump()
+        .map_err(|e| format!("Failed to create event pump: {}", e))?;
 
-    let _ = event_loop.run_app(&mut app);
+    'running: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running;
+                }
+                Event::Window {
+                    win_event: WindowEvent::Resized(w, h), ..
+                } => {
+                    if w > 0 && h > 0 {
+                        camera.resize(w as u32, h as u32);
+                        if let Err(e) = renderer.resize(w as u32, h as u32) {
+                            eprintln!("Failed to resize swapchain: {:?}", e);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
 
-    return Ok(());
+        if let Err(e) = renderer.draw(&window, &scene, &camera) {
+            eprintln!("Failed to draw: {:?}", e);
+        }
+
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+    }
+
+    Ok(())
 }

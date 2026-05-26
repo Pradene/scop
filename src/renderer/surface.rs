@@ -1,10 +1,12 @@
 use ash::{khr, vk, Entry, Instance};
-use winit::{
-    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
-    window::Window,
-};
+use sdl3::video::Window;
 
-use super::VkInstance;
+use crate::renderer::VkInstance;
+
+// use winit::{
+// raw_window_handle::{HasDisplayHandle, HasWindowHandle},
+// window::Window,
+// };
 
 pub struct VkSurface {
     pub loader: khr::surface::Instance,
@@ -14,32 +16,17 @@ pub struct VkSurface {
 impl VkSurface {
     pub fn new(window: &Window, entry: &Entry, instance: &VkInstance) -> Result<VkSurface, String> {
         let loader = khr::surface::Instance::new(entry, &instance.handle);
-        let handle = VkSurface::create_surface(window, entry, &instance.handle)?;
+        let handle = VkSurface::create_surface(window, &instance.handle)?;
 
         return Ok(VkSurface { loader, handle });
     }
 
-    fn create_surface(
-        window: &Window,
-        entry: &Entry,
-        instance: &Instance,
-    ) -> Result<vk::SurfaceKHR, String> {
-        let display_handle = window
-            .display_handle()
-            .map_err(|e| format!("Error with display: {}", e))?;
-        let window_handle = window
-            .window_handle()
-            .map_err(|e| format!("Error with window: {}", e))?;
-
+    fn create_surface(window: &Window, instance: &Instance) -> Result<vk::SurfaceKHR, String> {
+        let vk_instance = instance.handle();
         let surface = unsafe {
-            ash_window::create_surface(
-                &entry,
-                &instance,
-                display_handle.as_raw(),
-                window_handle.as_raw(),
-                None,
-            )
-            .map_err(|e| format!("Failed to create surface: {}", e))?
+            window
+                .vulkan_create_surface(vk_instance)
+                .expect("Failed to create Vulkan surface")
         };
 
         return Ok(surface);

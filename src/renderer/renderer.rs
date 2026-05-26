@@ -6,15 +6,16 @@ use super::{
     VkCommandPool, VkContext, VkDescriptorPool, VkDescriptorSetLayout, VkPipeline, VkQueue,
     VkRenderPass, VkSwapchain,
 };
-use crate::renderer::{VkBuffer, FrameData};
 use crate::camera::Camera;
 use crate::math::Mat4;
+use crate::renderer::{FrameData, VkBuffer};
 use crate::scene::ModelPushConstants;
 use crate::scene::Scene;
 use crate::scene::{MaterialPushConstants, Object};
 use crate::scene::{Mesh, SubMesh};
 
-use winit::window::Window;
+// use winit::window::Window;
+use sdl3::video::Window;
 
 pub struct Uniforms {
     pub view: Mat4,
@@ -54,7 +55,7 @@ impl Renderer {
         let capabilities = support_details.capabilities;
         let surface_format = Renderer::choose_surface_format(&support_details.formats);
         let present_mode = Renderer::choose_present_mode(&support_details.present_modes);
-        let (width, height) = window.inner_size().into();
+        let (width, height) = window.size().into();
         let extent = Renderer::choose_extent(&support_details.capabilities, width, height);
 
         let render_pass = VkRenderPass::new(&context, surface_format.format)?;
@@ -75,8 +76,7 @@ impl Renderer {
             vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
         )?;
 
-        let descriptor_pool =
-            VkDescriptorPool::new(context.device(), MAX_FRAMES_IN_FLIGHT)?;
+        let descriptor_pool = VkDescriptorPool::new(context.device(), MAX_FRAMES_IN_FLIGHT)?;
 
         let frames = (0..MAX_FRAMES_IN_FLIGHT as usize)
             .map(|_| {
@@ -173,7 +173,7 @@ impl Renderer {
         let image_index = match self.acquire_image()? {
             Some(index) => index,
             None => {
-                let (w, h) = window.inner_size().into();
+                let (w, h) = window.size().into();
                 self.resize(w, h)?;
                 return Ok(());
             }
@@ -185,7 +185,7 @@ impl Renderer {
         self.submit()?;
 
         if self.present(image_index)? {
-            let (w, h) = window.inner_size().into();
+            let (w, h) = window.size().into();
             self.resize(w, h)?;
         }
 
@@ -196,7 +196,9 @@ impl Renderer {
     fn wait_for_frame(&self) -> Result<(), String> {
         let fence = self.frames[self.frame].in_flight.handle;
         unsafe {
-            self.context.device().handle
+            self.context
+                .device()
+                .handle
                 .wait_for_fences(&[fence], true, u64::MAX)
                 .map_err(|e| format!("Failed to wait for fence: {}", e))
         }
@@ -222,14 +224,13 @@ impl Renderer {
         let frame = &self.frames[self.frame];
         let device = self.context.device();
         unsafe {
-            device.handle
+            device
+                .handle
                 .reset_fences(&[frame.in_flight.handle])
                 .map_err(|e| format!("Failed to reset fence: {}", e))?;
-            device.handle
-                .reset_command_buffer(
-                    frame.command_buffer,
-                    vk::CommandBufferResetFlags::empty(),
-                )
+            device
+                .handle
+                .reset_command_buffer(frame.command_buffer, vk::CommandBufferResetFlags::empty())
                 .map_err(|e| format!("Failed to reset command buffer: {}", e))
         }
     }
@@ -251,11 +252,8 @@ impl Renderer {
 
     fn present(&self, image_index: u32) -> Result<bool, String> {
         let signal_semaphores = [self.frames[self.frame].render_finished.handle];
-        self.swapchain.queue_present(
-            &self.present_queue.handle,
-            &signal_semaphores,
-            image_index,
-        )
+        self.swapchain
+            .queue_present(&self.present_queue.handle, &signal_semaphores, image_index)
     }
 
     fn record(&self, image_index: u32) -> Result<(), String> {
@@ -268,9 +266,13 @@ impl Renderer {
         self.bind_pipeline_and_viewport(cmd, frame);
 
         unsafe {
-            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
+            device
+                .handle
+                .cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
             self.draw_meshes(&device.handle, &cmd);
-            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
+            device
+                .handle
+                .cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
             self.draw_meshes(&device.handle, &cmd);
             device.handle.cmd_end_render_pass(cmd);
         }
@@ -284,7 +286,9 @@ impl Renderer {
             ..Default::default()
         };
         unsafe {
-            self.context.device().handle
+            self.context
+                .device()
+                .handle
                 .begin_command_buffer(cmd, &begin_info)
                 .map_err(|e| format!("Failed to begin command buffer: {}", e))
         }
@@ -292,7 +296,9 @@ impl Renderer {
 
     fn end_command_buffer(&self, cmd: vk::CommandBuffer) -> Result<(), String> {
         unsafe {
-            self.context.device().handle
+            self.context
+                .device()
+                .handle
                 .end_command_buffer(cmd)
                 .map_err(|e| format!("Failed to end command buffer: {}", e))
         }
@@ -301,10 +307,15 @@ impl Renderer {
     fn begin_render_pass(&self, cmd: vk::CommandBuffer, image_index: u32) {
         let clear_values = [
             vk::ClearValue {
-                color: vk::ClearColorValue { float32: [0., 0., 0., 1.] },
+                color: vk::ClearColorValue {
+                    float32: [0., 0., 0., 1.],
+                },
             },
             vk::ClearValue {
-                depth_stencil: vk::ClearDepthStencilValue { depth: 1., stencil: 0 },
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.,
+                    stencil: 0,
+                },
             },
         ];
 
@@ -332,10 +343,12 @@ impl Renderer {
 
     fn bind_pipeline_and_viewport(&self, cmd: vk::CommandBuffer, frame: &FrameData) {
         let viewport = vk::Viewport {
-            x: 0., y: 0.,
+            x: 0.,
+            y: 0.,
             width: self.swapchain.extent.width as f32,
             height: self.swapchain.extent.height as f32,
-            min_depth: 0., max_depth: 1.,
+            min_depth: 0.,
+            max_depth: 1.,
         };
         let scissor = vk::Rect2D {
             offset: vk::Offset2D { x: 0, y: 0 },
@@ -344,7 +357,11 @@ impl Renderer {
 
         let device = self.context.device();
         unsafe {
-            device.handle.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline.handle);
+            device.handle.cmd_bind_pipeline(
+                cmd,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.handle,
+            );
             device.handle.cmd_set_viewport(cmd, 0, &[viewport]);
             device.handle.cmd_set_scissor(cmd, 0, &[scissor]);
             device.handle.cmd_bind_descriptor_sets(
@@ -368,7 +385,9 @@ impl Renderer {
     }
 
     fn bind_mesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, mesh: &Mesh) {
-        let vpc = ModelPushConstants { model: Mat4::identity() };
+        let vpc = ModelPushConstants {
+            model: Mat4::identity(),
+        };
         unsafe {
             device.cmd_push_constants(
                 *cmd,

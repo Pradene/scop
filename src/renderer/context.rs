@@ -1,6 +1,6 @@
 use ash::Entry;
+use sdl3::video::Window;
 use std::sync::Arc;
-use winit::window::Window;
 
 use super::{VkDevice, VkInstance, VkPhysicalDevice, VkSurface};
 

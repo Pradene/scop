@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use ash::vk;
+use std::sync::Arc;
 
 use super::{Uniforms, VkBuffer, VkDevice};
 

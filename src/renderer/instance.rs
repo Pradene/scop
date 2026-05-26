@@ -1,9 +1,7 @@
 use std::ffi::CString;
 
 use ash::{vk, Entry, Instance};
-use ash_window;
-
-use winit::{raw_window_handle::HasDisplayHandle, window::Window};
+use sdl3::video::Window;
 
 use super::{VALIDATION_LAYERS, VALIDATION_LAYERS_ENABLED};
 
@@ -62,12 +60,15 @@ impl VkInstance {
             ..Default::default()
         };
 
-        let display_handle = window
-            .display_handle()
-            .map_err(|e| format!("Error with display: {}", e))?;
+        let extension_names = window.vulkan_instance_extensions().unwrap();
 
-        let extension_names = ash_window::enumerate_required_extensions(display_handle.as_raw())
-            .map_err(|e| format!("Error with extension: {}", e))?;
+        let extension_cstrings: Vec<CString> = extension_names
+            .iter()
+            .map(|s| CString::new(s.as_str()).unwrap())
+            .collect();
+
+        let extension_names_raw: Vec<*const i8> =
+            extension_cstrings.iter().map(|s| s.as_ptr()).collect();
 
         let validation_layers_cstring: Vec<CString> = VALIDATION_LAYERS
             .iter()
@@ -81,8 +82,8 @@ impl VkInstance {
 
         let mut create_info = vk::InstanceCreateInfo {
             p_application_info: &application_info,
-            pp_enabled_extension_names: extension_names.as_ptr(),
-            enabled_extension_count: extension_names.len() as u32,
+            pp_enabled_extension_names: extension_names_raw.as_ptr(),
+            enabled_extension_count: extension_names_raw.len() as u32,
             ..Default::default()
         };
 
@@ -97,7 +98,7 @@ impl VkInstance {
                 .map_err(|e| format!("Failed to create Vulkan instance: {:?}", e))?
         };
 
-        return Ok(instance);
+        Ok(instance)
     }
 }
 

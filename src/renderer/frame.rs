@@ -24,8 +24,7 @@ impl FrameData {
         let uniform_buffer =
             VkBuffer::host_visible(context, 1, vk::BufferUsageFlags::UNIFORM_BUFFER)?;
 
-        let descriptor_set =
-            descriptor_pool.create_set(descriptor_set_layout, &uniform_buffer)?;
+        let descriptor_set = descriptor_pool.create_set(descriptor_set_layout, &uniform_buffer)?;
 
         let command_buffer = command_pool
             .allocate_buffers(vk::CommandBufferLevel::PRIMARY, 1)?
