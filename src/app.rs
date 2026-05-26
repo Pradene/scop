@@ -1,220 +1,204 @@
-// use crate::{camera::Camera, renderer::Renderer, scene::Scene, WINDOW_HEIGHT, WINDOW_WIDTH};
+use crate::camera::Camera;
+use crate::renderer::Renderer;
+use crate::scene::Scene;
+use sdl3::event::{Event, WindowEvent};
+use sdl3::keyboard::Keycode;
+use sdl3::mouse::MouseButton;
+use sdl3::video::Window;
+use sdl3::Sdl;
 
-// use winit::{
-//     application::ApplicationHandler,
-//     dpi::PhysicalSize,
-//     event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
-//     event_loop::ActiveEventLoop,
-//     keyboard::{KeyCode, PhysicalKey},
-//     window::{Window, WindowId},
-// };
+pub struct App {
+    pub sdl_context: Sdl,
+    pub renderer: Renderer,
+    pub window: Window,
+    pub camera: Camera,
+    event_pump: sdl3::EventPump,
+    pub scene: Scene,
+    
 
-// pub struct App {
-//     window: Option<Window>,
-//     renderer: Option<Renderer>,
-//     camera: Camera,
-//     scene: Scene,
+    // Mouse state
+    mouse_pressed: bool,
+    last_mouse: Option<(f32, f32)>,
 
-//     // Mouse state
-//     mouse_pressed: bool,
-//     last_mouse: Option<(f32, f32)>,
+    // Keys currently held
+    key_forward: bool,
+    key_backward: bool,
+    key_left: bool,
+    key_right: bool,
+    key_up: bool,
+    key_down: bool,
 
-//     // Keys currently held
-//     key_forward: bool,
-//     key_backward: bool,
-//     key_left: bool,
-//     key_right: bool,
-//     key_up: bool,
-//     key_down: bool,
+    last_update: std::time::Instant,
+}
 
-//     last_update: std::time::Instant,
-// }
+impl App {
+    pub fn new(scene: Scene, camera: Camera, width: u32, height: u32) -> Result<App, String> {
+        let sdl_context = sdl3::init().map_err(|e| format!("Failed to init SDL3: {}", e))?;
 
-// impl ApplicationHandler for App {
-//     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-//         if self.window.is_none() {
-//             let window_attributes = Window::default_attributes()
-//                 .with_title("Scop")
-//                 .with_inner_size(PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT));
+        let video_subsystem = sdl_context
+            .video()
+            .map_err(|e| format!("Failed to get video subsystem: {}", e))?;
 
-//             let window = match event_loop.create_window(window_attributes) {
-//                 Ok(w) => w,
-//                 Err(e) => {
-//                     eprintln!("Failed to create window: {:?}", e);
-//                     return;
-//                 }
-//             };
+        let window = video_subsystem
+            .window("Scop", width, height)
+            .position_centered()
+            .vulkan()
+            .resizable()
+            .build()
+            .map_err(|e| format!("Failed to create window: {}", e))?;
 
-//             match Renderer::new(&window) {
-//                 Ok(mut renderer) => {
-//                     for obj in &self.scene.objects {
-//                         let _ = renderer.upload_mesh(obj);
-//                     }
+        let renderer =
+            Renderer::new(&window).map_err(|e| format!("Failed to create renderer: {}", e))?;
 
-//                     self.renderer = Some(renderer);
-//                     self.window = Some(window);
-//                 }
-//                 Err(e) => {
-//                     eprintln!("Failed to create Vulkan renderer: {:?}", e);
-//                 }
-//             }
-//         }
-//     }
+        let event_pump = sdl_context
+            .event_pump()
+            .map_err(|e| format!("Failed to get event pump: {}", e))?;
 
-//     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-//         match event {
-//             WindowEvent::CloseRequested => {
-//                 event_loop.exit();
-//             }
+        Ok(App {
+            sdl_context,
+            window,
+            renderer,
+            camera,
+            scene,
+            event_pump,
+            mouse_pressed: false,
+            last_mouse: None,
+            key_forward: false,
+            key_backward: false,
+            key_left: false,
+            key_right: false,
+            key_up: false,
+            key_down: false,
+            last_update: std::time::Instant::now(),
+        })
+    }
 
-//             WindowEvent::RedrawRequested => {
-//                 if event_loop.exiting() {
-//                     return;
-//                 }
+    pub fn handle_events(&mut self) -> Result<bool, String> {
+        let events: Vec<Event> = self.event_pump.poll_iter().collect();
 
-//                 self.tick_movement();
+        for event in events {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => {
+                    return Ok(false);
+                }
 
-//                 if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
-//                     let _ = renderer.draw(window, &self.scene, &self.camera);
-//                     if !event_loop.exiting() {
-//                         window.request_redraw();
-//                     }
-//                 }
-//             }
+                Event::Window {
+                    win_event: WindowEvent::Resized(w, h),
+                    ..
+                } => {
+                    if w > 0 && h > 0 {
+                        self.camera.resize(w as u32, h as u32);
+                        if let Err(e) = self.renderer.resize(w as u32, h as u32) {
+                            eprintln!("Failed to resize swapchain: {:?}", e);
+                        }
+                    }
+                }
 
-//             WindowEvent::Resized(_) => {
-//                 if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
-//                     let (width, height): (u32, u32) = window.inner_size().into();
-//                     if width > 0 && height > 0 {
-//                         self.camera.resize(width, height);
-//                         if let Err(e) = renderer.resize(width, height) {
-//                             eprintln!("Failed to handle swapchain resize: {:?}", e);
-//                         }
-//                     }
-//                 }
-//             }
+                Event::MouseButtonDown {
+                    mouse_btn: MouseButton::Right,
+                    ..
+                } => {
+                    self.mouse_pressed = true;
+                }
+                Event::MouseButtonUp {
+                    mouse_btn: MouseButton::Right,
+                    ..
+                } => {
+                    self.mouse_pressed = false;
+                    self.last_mouse = None;
+                }
 
-//             WindowEvent::MouseInput {
-//                 state,
-//                 button: MouseButton::Right,
-//                 ..
-//             } => {
-//                 self.mouse_pressed = state == ElementState::Pressed;
-//                 if !self.mouse_pressed {
-//                     self.last_mouse = None;
-//                 }
-//             }
+                Event::MouseMotion { x, y, .. } => {
+                    let current = (x as f32, y as f32);
+                    if self.mouse_pressed {
+                        if let Some(last) = self.last_mouse {
+                            let (w, h) = self.window.size();
+                            let dx = (current.0 - last.0) / w as f32;
+                            let dy = (current.1 - last.1) / h as f32;
+                            self.camera.look(dx, dy);
+                        }
+                    }
+                    self.last_mouse = Some(current);
+                }
 
-//             WindowEvent::CursorMoved { position, .. } => {
-//                 let current = (position.x as f32, position.y as f32);
-//                 if self.mouse_pressed {
-//                     if let Some(last) = self.last_mouse {
-//                         if let Some(window) = &self.window {
-//                             let size = window.inner_size();
-//                             let dx = (current.0 - last.0) / size.width as f32;
-//                             let dy = (current.1 - last.1) / size.height as f32;
-//                             self.camera.look(dx, dy);
-//                         }
-//                     }
-//                 }
-//                 self.last_mouse = Some(current);
-//             }
+                Event::MouseWheel { y, .. } => {
+                    let amount = y * 10.0;
+                    self.camera
+                        .move_forward(amount * self.camera.move_speed * 0.05);
+                }
 
-//             WindowEvent::MouseWheel { delta, .. } => {
-//                 let amount = match delta {
-//                     MouseScrollDelta::LineDelta(_, y) => y * 10.0,
-//                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.5,
-//                 };
-//                 self.camera
-//                     .move_forward(amount * self.camera.move_speed * 0.05);
-//             }
+                Event::KeyDown {
+                    keycode: Some(key),
+                    repeat: false,
+                    ..
+                } => {
+                    self.set_key(key, true);
+                }
+                Event::KeyUp {
+                    keycode: Some(key), ..
+                } => {
+                    self.set_key(key, false);
+                }
 
-//             WindowEvent::KeyboardInput { event, .. } => {
-//                 let pressed = event.state == ElementState::Pressed;
-//                 match event.physical_key {
-//                     PhysicalKey::Code(KeyCode::Escape) => {
-//                         if pressed {
-//                             event_loop.exit();
-//                         }
-//                     }
-//                     PhysicalKey::Code(KeyCode::KeyW) | PhysicalKey::Code(KeyCode::ArrowUp) => {
-//                         self.key_forward = pressed
-//                     }
-//                     PhysicalKey::Code(KeyCode::KeyS) | PhysicalKey::Code(KeyCode::ArrowDown) => {
-//                         self.key_backward = pressed
-//                     }
-//                     PhysicalKey::Code(KeyCode::KeyA) | PhysicalKey::Code(KeyCode::ArrowLeft) => {
-//                         self.key_left = pressed
-//                     }
-//                     PhysicalKey::Code(KeyCode::KeyD) | PhysicalKey::Code(KeyCode::ArrowRight) => {
-//                         self.key_right = pressed
-//                     }
-//                     PhysicalKey::Code(KeyCode::KeyE) | PhysicalKey::Code(KeyCode::Space) => {
-//                         self.key_up = pressed
-//                     }
-//                     PhysicalKey::Code(KeyCode::KeyQ) | PhysicalKey::Code(KeyCode::ShiftLeft) => {
-//                         self.key_down = pressed
-//                     }
-//                     _ => {}
-//                 }
-//             }
+                _ => {}
+            }
+        }
 
-//             _ => (),
-//         }
-//     }
+        Ok(true)
+    }
 
-//     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-//         if let Some(renderer) = &self.renderer {
-//             renderer.wait_idle();
-//         }
-//         self.renderer = None;
-//         self.window = None;
-//     }
-// }
+    pub fn update(&mut self) {
+        let now = std::time::Instant::now();
+        let dt = now.duration_since(self.last_update).as_secs_f32();
+        self.last_update = now;
 
-// impl App {
-//     pub fn new(scene: Scene, camera: Camera) -> App {
-//         App {
-//             window: None,
-//             renderer: None,
-//             scene,
-//             camera,
-//             mouse_pressed: false,
-//             last_mouse: None,
-//             key_forward: false,
-//             key_backward: false,
-//             key_left: false,
-//             key_right: false,
-//             key_up: false,
-//             key_down: false,
-//             last_update: std::time::Instant::now(),
-//         }
-//     }
+        let speed = self.camera.move_speed * dt;
 
-//     fn tick_movement(&mut self) {
-//         let now = std::time::Instant::now();
-//         let dt = now.duration_since(self.last_update).as_secs_f32();
-//         self.last_update = now;
+        if self.key_forward {
+            self.camera.move_forward(speed);
+        }
+        if self.key_backward {
+            self.camera.move_forward(-speed);
+        }
+        if self.key_right {
+            self.camera.move_right(speed);
+        }
+        if self.key_left {
+            self.camera.move_right(-speed);
+        }
+        if self.key_up {
+            self.camera.move_up(speed);
+        }
+        if self.key_down {
+            self.camera.move_up(-speed);
+        }
+    }
 
-//         let speed = self.camera.move_speed * dt;
+    pub fn draw(&mut self) {
+        if let Err(e) = self.renderer.draw(&self.window, &self.scene, &self.camera) {
+            eprintln!("Failed to draw: {:?}", e);
+        }
+    }
 
-//         if self.key_forward {
-//             self.camera.move_forward(speed);
-//         }
-//         if self.key_backward {
-//             self.camera.move_forward(-speed);
-//         }
-//         if self.key_right {
-//             self.camera.move_right(speed);
-//         }
-//         if self.key_left {
-//             self.camera.move_right(-speed);
-//         }
-//         if self.key_up {
-//             self.camera.move_up(speed);
-//         }
-//         if self.key_down {
-//             self.camera.move_up(-speed);
-//         }
-//     }
-// }
+    fn set_key(&mut self, key: Keycode, pressed: bool) {
+        match key {
+            Keycode::W | Keycode::Up => self.key_forward = pressed,
+            Keycode::S | Keycode::Down => self.key_backward = pressed,
+            Keycode::A | Keycode::Left => self.key_left = pressed,
+            Keycode::D | Keycode::Right => self.key_right = pressed,
+            Keycode::E | Keycode::Space => self.key_up = pressed,
+            Keycode::Q | Keycode::LShift => self.key_down = pressed,
+            _ => {}
+        }
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        self.renderer.wait_idle();
+    }
+}
