@@ -18,12 +18,14 @@ fn main() -> Result<(), String> {
 
     let mut app = App::new(camera, width, height)?;
 
-    let object = Object::parse("assets/teapot.obj")
-        .map_err(|e| format!("Failed to parse object: {}", e))?;
+    let object =
+        Object::parse("assets/teapot.obj").map_err(|e| format!("Failed to parse object: {}", e))?;
     app.add_object(object)?;
 
     loop {
-        if !app.handle_events()? { break; }
+        if !app.handle_events()? {
+            break;
+        }
         app.update();
         app.draw();
     }

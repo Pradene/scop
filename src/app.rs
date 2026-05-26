@@ -1,6 +1,6 @@
 use crate::camera::Camera;
 use crate::renderer::Renderer;
-use crate::scene::{Scene, Object};
+use crate::scene::{Object, Scene};
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::Keycode;
 use sdl3::mouse::MouseButton;
