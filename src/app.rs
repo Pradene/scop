@@ -1,6 +1,6 @@
 use crate::camera::Camera;
 use crate::renderer::Renderer;
-use crate::scene::Scene;
+use crate::scene::{Scene, Object};
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::Keycode;
 use sdl3::mouse::MouseButton;
@@ -14,7 +14,6 @@ pub struct App {
     pub camera: Camera,
     event_pump: sdl3::EventPump,
     pub scene: Scene,
-    
 
     // Mouse state
     mouse_pressed: bool,
@@ -32,7 +31,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(scene: Scene, camera: Camera, width: u32, height: u32) -> Result<App, String> {
+    pub fn new(camera: Camera, width: u32, height: u32) -> Result<App, String> {
         let sdl_context = sdl3::init().map_err(|e| format!("Failed to init SDL3: {}", e))?;
 
         let video_subsystem = sdl_context
@@ -54,6 +53,7 @@ impl App {
             .event_pump()
             .map_err(|e| format!("Failed to get event pump: {}", e))?;
 
+        let scene = Scene::new();
         Ok(App {
             sdl_context,
             window,
@@ -194,6 +194,12 @@ impl App {
             Keycode::Q | Keycode::LShift => self.key_down = pressed,
             _ => {}
         }
+    }
+
+    pub fn add_object(&mut self, object: Object) -> Result<(), String> {
+        self.renderer.upload_mesh(&object)?;
+        self.scene.add(object);
+        Ok(())
     }
 }
 

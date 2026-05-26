@@ -16,21 +16,14 @@ fn main() -> Result<(), String> {
         500.,
     );
 
-    let scene = Scene::new();
-    let object =
-        Object::parse("assets/teapot.obj").map_err(|e| format!("Failed to parse object: {}", e))?;
+    let mut app = App::new(camera, width, height)?;
 
-    let mut app = App::new(scene, camera, width, height)?;
-
-    app.renderer
-        .upload_mesh(&object)
-        .map_err(|e| format!("Failed to upload mesh: {}", e))?;
-    app.scene.add(object);
+    let object = Object::parse("assets/teapot.obj")
+        .map_err(|e| format!("Failed to parse object: {}", e))?;
+    app.add_object(object)?;
 
     loop {
-        if !app.handle_events()? {
-            break;
-        }
+        if !app.handle_events()? { break; }
         app.update();
         app.draw();
     }
