@@ -12,10 +12,12 @@ mod pipeline;
 mod queue;
 mod render_pass;
 mod renderer;
+mod resources;
 mod semaphore;
 mod shaders;
 mod surface;
 mod swapchain;
+mod texture;
 mod utils;
 mod vertex;
 
@@ -33,10 +35,12 @@ pub use pipeline::*;
 pub use queue::*;
 pub use render_pass::*;
 pub use renderer::*;
+pub use resources::*;
 pub use semaphore::*;
 pub use shaders::*;
 pub use surface::*;
 pub use swapchain::*;
+pub use texture::*;
 pub use utils::*;
 pub use vertex::*;
 

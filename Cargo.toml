@@ -7,5 +7,6 @@ edition = "2021"
 [dependencies]
 ash = { version = "0.38.0", features = ["linked"] }
 ash-window = "0.13.0"
+image = "0.25.10"
 raw-window-handle = "0.6.2"
 sdl3 = { version = "0.18.4", features = ["ash"] }

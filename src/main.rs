@@ -1,7 +1,7 @@
 use scop::app::App;
 use scop::camera::Camera;
 use scop::math::Vec3;
-use scop::scene::{Object, Scene};
+use scop::scene::Object;
 
 fn main() -> Result<(), String> {
     let width = 800u32;

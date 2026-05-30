@@ -8,7 +8,8 @@ use super::{
 };
 use crate::camera::Camera;
 use crate::math::Mat4;
-use crate::renderer::{FrameData, VkBuffer};
+use crate::renderer::ResourceManager;
+use crate::renderer::FrameData;
 use crate::scene::ModelPushConstants;
 use crate::scene::Scene;
 use crate::scene::{MaterialPushConstants, Object};
@@ -26,7 +27,7 @@ pub struct Renderer {
     frames: Vec<FrameData>,
     frame: usize,
 
-    meshes: Vec<Mesh>,
+    resources: ResourceManager,
     command_pool: VkCommandPool,
     swapchain: VkSwapchain,
     pipeline: VkPipeline,
@@ -89,6 +90,9 @@ impl Renderer {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        let resources = ResourceManager::new(&context, &graphics_queue, &command_pool)
+            .map_err(|e| format!("Failed to create resources manager: {}", e))?;
+
         Ok(Renderer {
             context,
             graphics_queue,
@@ -97,72 +101,21 @@ impl Renderer {
             render_pass,
             pipeline,
             command_pool,
+            resources,
             descriptor_pool,
             descriptor_set_layout,
             frames,
             frame: 0,
-            meshes: Vec::new(),
         })
     }
 
     pub fn upload_mesh(&mut self, object: &Object) -> Result<(), String> {
-        let mut all_vertices = Vec::new();
-        let mut all_indices = Vec::new();
-        let mut primitives = Vec::new();
-
-        for group in &object.groups {
-            let (vertices, indices) = object.get_group_vertices_and_indices(group);
-            if indices.is_empty() {
-                continue;
-            }
-
-            let index_offset = all_indices.len() as u32;
-            let index_count = indices.len() as u32;
-            let vertex_offset = all_vertices.len() as i32;
-
-            let material = group
-                .material
-                .as_ref()
-                .and_then(|name| object.materials.get(name))
-                .cloned()
-                .unwrap_or_default();
-
-            all_vertices.extend_from_slice(&vertices);
-            all_indices.extend_from_slice(&indices);
-
-            primitives.push(SubMesh {
-                index_offset,
-                index_count,
-                vertex_offset,
-                material,
-            });
-        }
-
-        if all_vertices.is_empty() || all_indices.is_empty() {
-            return Ok(());
-        }
-
-        let vertex_buffer = VkBuffer::device_local(
+        self.resources.upload_mesh(
             &self.context,
             &self.graphics_queue,
             &self.command_pool,
-            &all_vertices,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
+            object,
         )?;
-
-        let index_buffer = VkBuffer::device_local(
-            &self.context,
-            &self.graphics_queue,
-            &self.command_pool,
-            &all_indices,
-            vk::BufferUsageFlags::INDEX_BUFFER,
-        )?;
-
-        self.meshes.push(Mesh {
-            vertex_buffer,
-            index_buffer,
-            primitives,
-        });
 
         Ok(())
     }
@@ -266,14 +219,10 @@ impl Renderer {
         self.bind_pipeline_and_viewport(cmd, frame);
 
         unsafe {
-            device
-                .handle
-                .cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
-            self.draw_meshes(&device.handle, &cmd);
-            device
-                .handle
-                .cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
-            self.draw_meshes(&device.handle, &cmd);
+            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
+            self.draw_meshes(&device.handle, &cmd, frame);
+            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
+            self.draw_meshes(&device.handle, &cmd, frame);
             device.handle.cmd_end_render_pass(cmd);
         }
 
@@ -375,10 +324,29 @@ impl Renderer {
         }
     }
 
-    fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer) {
-        for mesh in &self.meshes {
+    fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer, frame: &FrameData) {
+        for mesh in &self.resources.meshes {
             self.bind_mesh(device, cmd, mesh);
             for submesh in &mesh.primitives {
+                self.descriptor_pool.update_textures(
+                    frame.descriptor_set,
+                    self.resources.get_texture(submesh.tex_diffuse),
+                    self.resources.get_texture(submesh.tex_specular),
+                    self.resources.get_texture(submesh.tex_ambient),
+                );
+
+                // re-bind descriptor set after updating textures
+                unsafe {
+                    device.cmd_bind_descriptor_sets(
+                        *cmd,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        self.pipeline.layout,
+                        0,
+                        &[frame.descriptor_set],
+                        &[],
+                    );
+                }
+
                 self.draw_submesh(device, cmd, submesh);
             }
         }
