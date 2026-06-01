@@ -10,6 +10,12 @@ pub struct Vec2 {
     pub y: f32,
 }
 
+impl Default for Vec2 {
+    fn default() -> Self {
+        Vec2::ZERO
+    }
+}
+
 impl Vec2 {
     pub const ZERO: Vec2 = Vec2 { x: 0.0, y: 0.0 };
     pub const ONE: Vec2 = Vec2 { x: 1.0, y: 1.0 };
@@ -33,6 +39,12 @@ pub struct Vec3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+}
+
+impl Default for Vec3 {
+    fn default() -> Self {
+        Vec3::ZERO
+    }
 }
 
 impl Vec3 {
@@ -279,6 +291,12 @@ pub struct Vec4 {
     pub y: f32,
     pub z: f32,
     pub w: f32,
+}
+
+impl Default for Vec4 {
+    fn default() -> Self {
+        Vec4::ZERO
+    }
 }
 
 impl Vec4 {

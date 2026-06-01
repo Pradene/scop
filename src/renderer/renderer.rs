@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use ash::vk;
 
 use super::query_swapchain_support;
@@ -8,15 +10,29 @@ use super::{
 };
 use crate::camera::Camera;
 use crate::math::Mat4;
+use crate::math::Vec3;
 use crate::renderer::FrameData;
+use crate::renderer::MeshHandle;
+use crate::renderer::MeshPushConstants;
 use crate::renderer::ResourceManager;
-use crate::scene::ModelPushConstants;
-use crate::scene::Scene;
-use crate::scene::{MaterialPushConstants, Object};
-use crate::scene::{Mesh, SubMesh};
+use crate::renderer::{Mesh, SubMesh};
 
 // use winit::window::Window;
 use sdl3::video::Window;
+
+#[repr(C)]
+pub struct MaterialPushConstants {
+    pub ambient: Vec3,
+    pub dissolve: f32,
+    pub diffuse: Vec3,
+    pub shininess: f32,
+    pub specular: Vec3,
+    pub optical_density: f32,
+    pub illum: i32,
+    pub tex_diffuse: u32,
+    pub tex_ambient: u32,
+    pub tex_specular: u32,
+}
 
 pub struct Uniforms {
     pub view: Mat4,
@@ -93,6 +109,15 @@ impl Renderer {
         let resources = ResourceManager::new(&context, &graphics_queue, &command_pool)
             .map_err(|e| format!("Failed to create resources manager: {}", e))?;
 
+        let white = resources.get_texture(ResourceManager::white_texture());
+        for frame in &frames {
+            descriptor_pool.register_texture_to_descriptor(
+                frame.descriptor_set,
+                ResourceManager::white_texture(),
+                white,
+            );
+        }
+
         Ok(Renderer {
             context,
             graphics_queue,
@@ -109,18 +134,30 @@ impl Renderer {
         })
     }
 
-    pub fn upload_mesh(&mut self, object: &Object) -> Result<(), String> {
-        self.resources.upload_mesh(
+    pub fn load_object(&mut self, path: &Path) -> Result<MeshHandle, String> {
+        let (handle, new_textures) = self.resources.load_object(
             &self.context,
             &self.graphics_queue,
             &self.command_pool,
-            object,
+            path,
         )?;
 
-        Ok(())
+        // Register only the newly added textures to every frame's descriptor set
+        for handle in new_textures {
+            let texture = self.resources.get_texture(handle);
+            for frame in &self.frames {
+                self.descriptor_pool.register_texture_to_descriptor(
+                    frame.descriptor_set,
+                    handle,
+                    texture,
+                );
+            }
+        }
+
+        Ok(handle)
     }
 
-    pub fn draw(&mut self, window: &Window, _scene: &Scene, camera: &Camera) -> Result<(), String> {
+    pub fn draw(&mut self, window: &Window, camera: &Camera) -> Result<(), String> {
         self.wait_for_frame()?;
 
         let image_index = match self.acquire_image()? {
@@ -322,37 +359,30 @@ impl Renderer {
     }
 
     fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer, frame: &FrameData) {
+        unsafe {
+            device.cmd_bind_descriptor_sets(
+                *cmd,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.layout,
+                0,
+                &[frame.descriptor_set],
+                &[],
+            );
+        }
+
         for mesh in &self.resources.meshes {
             self.bind_mesh(device, cmd, mesh);
             for submesh in &mesh.primitives {
-                self.descriptor_pool.update_textures(
-                    frame.descriptor_set,
-                    self.resources.get_texture(submesh.tex_diffuse),
-                    self.resources.get_texture(submesh.tex_specular),
-                    self.resources.get_texture(submesh.tex_ambient),
-                );
-
-                // re-bind descriptor set after updating textures
-                unsafe {
-                    device.cmd_bind_descriptor_sets(
-                        *cmd,
-                        vk::PipelineBindPoint::GRAPHICS,
-                        self.pipeline.layout,
-                        0,
-                        &[frame.descriptor_set],
-                        &[],
-                    );
-                }
-
                 self.draw_submesh(device, cmd, submesh);
             }
         }
     }
 
     fn bind_mesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, mesh: &Mesh) {
-        let vpc = ModelPushConstants {
-            model: Mat4::identity(),
+        let vpc = MeshPushConstants {
+            transform: mesh.transform,
         };
+
         unsafe {
             device.cmd_push_constants(
                 *cmd,
@@ -361,7 +391,7 @@ impl Renderer {
                 0,
                 std::slice::from_raw_parts(
                     &vpc as *const _ as *const u8,
-                    std::mem::size_of::<ModelPushConstants>(),
+                    std::mem::size_of::<MeshPushConstants>(),
                 ),
             );
             device.cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.handle], &[0]);
@@ -370,7 +400,20 @@ impl Renderer {
     }
 
     fn draw_submesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, submesh: &SubMesh) {
-        let fpc = MaterialPushConstants::from_material(&submesh.material);
+        let mat = self.resources.get_material(submesh.material);
+        let fpc = MaterialPushConstants{
+            ambient: mat.ka.unwrap_or(Vec3::new(0.1, 0.1, 0.1)),
+            dissolve: mat.dissolve.unwrap_or(1.0),
+            diffuse: mat.kd.unwrap_or(Vec3::new(0.7, 0.7, 0.7)),
+            shininess: mat.ns.unwrap_or(32.0),
+            specular: mat.ks.unwrap_or(Vec3::new(1.0, 1.0, 1.0)),
+            optical_density: mat.ni.unwrap_or(1.0),
+            illum: mat.illum.unwrap_or(2),
+            tex_diffuse: mat.map_kd.unwrap_or(ResourceManager::white_texture()) as u32,
+            tex_specular: mat.map_ks.unwrap_or(ResourceManager::white_texture()) as u32,
+            tex_ambient: mat.map_ka.unwrap_or(ResourceManager::white_texture()) as u32,
+        };
+
         unsafe {
             device.cmd_push_constants(
                 *cmd,
@@ -453,6 +496,10 @@ impl Renderer {
 
     pub fn wait_idle(&self) {
         self.context.device().wait_idle();
+    }
+
+    pub fn get_mesh(&mut self, handle: MeshHandle) -> &mut Mesh {
+        self.resources.get_mesh(handle)
     }
 }
 

@@ -20,6 +20,7 @@ mod swapchain;
 mod texture;
 mod utils;
 mod vertex;
+mod mesh;
 
 pub use buffer::*;
 pub use command_pool::*;
@@ -43,6 +44,7 @@ pub use swapchain::*;
 pub use texture::*;
 pub use utils::*;
 pub use vertex::*;
+pub use mesh::*;
 
 use ash::vk;
 use std::ffi::CStr;

@@ -1,4 +1,4 @@
-use crate::scene::{MaterialPushConstants, ModelPushConstants};
+use crate::renderer::{MaterialPushConstants, MeshPushConstants};
 
 use super::{Vertex, VkDescriptorSetLayout, VkDevice, VkRenderPass, VkShaderModule};
 
@@ -140,7 +140,7 @@ impl VkPipeline {
             vk::PushConstantRange {
                 stage_flags: vk::ShaderStageFlags::VERTEX,
                 offset: 0,
-                size: std::mem::size_of::<ModelPushConstants>() as u32,
+                size: std::mem::size_of::<MeshPushConstants>() as u32,
             },
             vk::PushConstantRange {
                 stage_flags: vk::ShaderStageFlags::FRAGMENT,

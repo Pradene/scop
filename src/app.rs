@@ -1,6 +1,7 @@
+use std::path::Path;
+
 use crate::camera::Camera;
-use crate::renderer::Renderer;
-use crate::scene::{Object, Scene};
+use crate::renderer::{Mesh, MeshHandle, Renderer};
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::Keycode;
 use sdl3::mouse::MouseButton;
@@ -13,7 +14,6 @@ pub struct App {
     pub window: Window,
     pub camera: Camera,
     event_pump: sdl3::EventPump,
-    pub scene: Scene,
 
     // Mouse state
     mouse_pressed: bool,
@@ -53,13 +53,11 @@ impl App {
             .event_pump()
             .map_err(|e| format!("Failed to get event pump: {}", e))?;
 
-        let scene = Scene::new();
         Ok(App {
             sdl_context,
             window,
             renderer,
             camera,
-            scene,
             event_pump,
             mouse_pressed: false,
             last_mouse: None,
@@ -119,7 +117,7 @@ impl App {
                             let (w, h) = self.window.size();
                             let dx = (current.0 - last.0) / w as f32;
                             let dy = (current.1 - last.1) / h as f32;
-                            self.camera.look(dx, dy);
+                            self.camera.look(dx, -dy);
                         }
                     }
                     self.last_mouse = Some(current);
@@ -179,7 +177,7 @@ impl App {
     }
 
     pub fn draw(&mut self) {
-        if let Err(e) = self.renderer.draw(&self.window, &self.scene, &self.camera) {
+        if let Err(e) = self.renderer.draw(&self.window, &self.camera) {
             eprintln!("Failed to draw: {:?}", e);
         }
     }
@@ -196,10 +194,12 @@ impl App {
         }
     }
 
-    pub fn add_object(&mut self, object: Object) -> Result<(), String> {
-        self.renderer.upload_mesh(&object)?;
-        self.scene.add(object);
-        Ok(())
+    pub fn load_object(&mut self, path: &Path) -> Result<MeshHandle, String> {
+        self.renderer.load_object(path)
+    }
+
+    pub fn get_object(&mut self, handle: MeshHandle) -> &mut Mesh {
+        self.renderer.get_mesh(handle)
     }
 }
 

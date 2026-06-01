@@ -17,7 +17,7 @@ impl ObjectParser {
         let file = File::open(path_ref).map_err(|e| format!("Failed to open OBJ: {}", e))?;
         let reader = BufReader::new(file);
 
-        let mut object = Object::new();
+        let mut object = Object::default();
         let mut current_group = Group::new("default".to_string());
         let mut current_material: Option<String> = None;
 
@@ -95,7 +95,6 @@ impl ObjectParser {
             object.groups.push(current_group);
         }
 
-        object.center = object.compute_center();
         Ok(object)
     }
 

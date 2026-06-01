@@ -1,13 +1,9 @@
 use std::collections::HashMap;
 
-use super::Material;
-use crate::math::{Mat4, Vec2, Vec3};
-use crate::parser::ObjectParser;
+use crate::math::{Vec2, Vec3};
 use crate::renderer::Vertex;
+use crate::scene::RawMaterial;
 
-pub struct ModelPushConstants {
-    pub model: Mat4,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FaceVertex {
@@ -39,32 +35,17 @@ impl Group {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Object {
     pub groups: Vec<Group>,
     pub vertices: Vec<Vec3>,
     pub normals: Vec<Vec3>,
     pub textures: Vec<Vec2>,
     pub center: Vec3,
-    pub materials: HashMap<String, Material>,
+    pub materials: HashMap<String, RawMaterial>,
 }
 
 impl Object {
-    pub fn new() -> Self {
-        Object {
-            groups: Vec::new(),
-            vertices: Vec::new(),
-            normals: Vec::new(),
-            textures: Vec::new(),
-            center: Vec3::new(0., 0., 0.),
-            materials: HashMap::new(),
-        }
-    }
-
-    pub fn parse(path: &str) -> Result<Object, String> {
-        ObjectParser::parse(path)
-    }
-
     pub fn triangulate_face(face: &[FaceVertex]) -> Vec<Face> {
         let mut triangles: Vec<Face> = Vec::new();
 

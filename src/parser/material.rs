@@ -4,17 +4,17 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use crate::math::Vec3;
-use crate::scene::Material;
+use crate::scene::RawMaterial;
 
 pub struct MaterialParser;
 
 impl MaterialParser {
-    pub fn parse<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Material>, String> {
+    pub fn parse<P: AsRef<Path>>(path: P) -> Result<HashMap<String, RawMaterial>, String> {
         let file = File::open(path).map_err(|e| format!("Failed to open MTL: {}", e))?;
         let reader = BufReader::new(file);
 
         let mut materials = HashMap::new();
-        let mut current = Material::default();
+        let mut current = RawMaterial::default();
 
         for line_result in reader.lines() {
             let line = line_result.map_err(|e| format!("Error reading file: {}", e))?;
@@ -24,13 +24,14 @@ impl MaterialParser {
         if !current.name.is_empty() {
             materials.insert(current.name.clone(), current);
         }
+
         Ok(materials)
     }
 
     fn parse_line(
         line: &str,
-        current: &mut Material,
-        materials: &mut HashMap<String, Material>,
+        current: &mut RawMaterial,
+        materials: &mut HashMap<String, RawMaterial>,
     ) -> Result<(), String> {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -46,7 +47,7 @@ impl MaterialParser {
                 if !current.name.is_empty() {
                     materials.insert(current.name.clone(), current.clone());
                 }
-                *current = Material::default();
+                *current = RawMaterial::default();
                 current.name = rem.join(" ");
             }
             "Ka" => current.ka = Some(Self::to_vec3(rem).ok_or("Invalid Ambient Color (Ka)")?),
