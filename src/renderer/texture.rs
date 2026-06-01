@@ -206,69 +206,6 @@ impl Drop for VkTexture {
     }
 }
 
-fn begin_single_cmd(
-    context: &VkContext,
-    command_pool: &VkCommandPool,
-) -> Result<vk::CommandBuffer, String> {
-    let cmd = command_pool
-        .allocate_buffers(vk::CommandBufferLevel::PRIMARY, 1)?
-        .remove(0);
-
-    unsafe {
-        context
-            .device()
-            .handle
-            .begin_command_buffer(
-                cmd,
-                &vk::CommandBufferBeginInfo {
-                    s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
-                    flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-                    ..Default::default()
-                },
-            )
-            .map_err(|e| format!("Failed to begin command buffer: {}", e))?;
-    }
-
-    Ok(cmd)
-}
-
-fn end_single_cmd(
-    context: &VkContext,
-    queue: &VkQueue,
-    command_pool: &VkCommandPool,
-    cmd: vk::CommandBuffer,
-) -> Result<(), String> {
-    let device = context.device();
-    unsafe {
-        device
-            .handle
-            .end_command_buffer(cmd)
-            .map_err(|e| format!("Failed to end command buffer: {}", e))?;
-
-        device
-            .handle
-            .queue_submit(
-                queue.handle,
-                &[vk::SubmitInfo {
-                    s_type: vk::StructureType::SUBMIT_INFO,
-                    command_buffer_count: 1,
-                    p_command_buffers: &cmd,
-                    ..Default::default()
-                }],
-                vk::Fence::null(),
-            )
-            .map_err(|e| format!("Failed to submit: {}", e))?;
-
-        device
-            .handle
-            .queue_wait_idle(queue.handle)
-            .map_err(|e| format!("Failed to wait idle: {}", e))?;
-
-        command_pool.free_buffers(&[cmd]);
-    }
-    Ok(())
-}
-
 fn transition_image_layout(
     context: &VkContext,
     queue: &VkQueue,
@@ -277,7 +214,7 @@ fn transition_image_layout(
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
 ) -> Result<(), String> {
-    let cmd = begin_single_cmd(context, command_pool)?;
+    let cmd = command_pool.begin_single_cmd(context.device())?;
 
     let (src_access, dst_access, src_stage, dst_stage) = match (old_layout, new_layout) {
         (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
@@ -326,7 +263,7 @@ fn transition_image_layout(
         );
     }
 
-    end_single_cmd(context, queue, command_pool, cmd)
+    command_pool.end_single_cmd(context.device(), queue, cmd)
 }
 
 fn copy_buffer_to_image(
@@ -338,7 +275,7 @@ fn copy_buffer_to_image(
     width: u32,
     height: u32,
 ) -> Result<(), String> {
-    let cmd = begin_single_cmd(context, command_pool)?;
+    let cmd = command_pool.begin_single_cmd(context.device())?;
 
     unsafe {
         context.device().handle.cmd_copy_buffer_to_image(
@@ -366,5 +303,5 @@ fn copy_buffer_to_image(
         );
     }
 
-    end_single_cmd(context, queue, command_pool, cmd)
+    command_pool.end_single_cmd(context.device(), queue, cmd)
 }

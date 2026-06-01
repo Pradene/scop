@@ -1,7 +1,7 @@
 use ash::vk;
 use std::sync::Arc;
 
-use super::VkDevice;
+use super::{VkDevice, VkQueue};
 
 pub struct VkCommandPool {
     device: Arc<VkDevice>,
@@ -56,6 +56,65 @@ impl VkCommandPool {
         self.device
             .handle
             .free_command_buffers(self.handle, buffers);
+    }
+
+    pub fn begin_single_cmd(&self, device: Arc<VkDevice>) -> Result<vk::CommandBuffer, String> {
+        let command_buffer = self
+            .allocate_buffers(vk::CommandBufferLevel::PRIMARY, 1)?
+            .remove(0);
+
+        unsafe {
+            device
+                .handle
+                .begin_command_buffer(
+                    command_buffer,
+                    &vk::CommandBufferBeginInfo {
+                        s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
+                        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+                        ..Default::default()
+                    },
+                )
+                .map_err(|e| format!("Failed to begin command buffer: {}", e))?;
+        }
+
+        Ok(command_buffer)
+    }
+
+    pub fn end_single_cmd(
+        &self,
+        device: Arc<VkDevice>,
+        queue: &VkQueue,
+        command_buffer: vk::CommandBuffer,
+    ) -> Result<(), String> {
+        unsafe {
+            device
+                .handle
+                .end_command_buffer(command_buffer)
+                .map_err(|e| format!("Failed to end command buffer: {}", e))?;
+
+            device
+                .handle
+                .queue_submit(
+                    queue.handle,
+                    &[vk::SubmitInfo {
+                        s_type: vk::StructureType::SUBMIT_INFO,
+                        command_buffer_count: 1,
+                        p_command_buffers: &command_buffer,
+                        ..Default::default()
+                    }],
+                    vk::Fence::null(),
+                )
+                .map_err(|e| format!("Failed to submit: {}", e))?;
+
+            device
+                .handle
+                .queue_wait_idle(queue.handle)
+                .map_err(|e| format!("Failed to wait idle: {}", e))?;
+
+            self.free_buffers(&[command_buffer]);
+        }
+
+        Ok(())
     }
 }
 

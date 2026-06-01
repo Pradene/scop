@@ -29,7 +29,6 @@ void main() {
     vec3 norm = normalize(fragNormal);
     vec3 lightDir = normalize(lightPos - fragPosition);
 
-    // sample textures, fall back to material colors if texture is white (1,1,1)
     vec3 ambient_color  = texture(tex_ambient,  fragUv).rgb * mat.ambient;
     vec3 diffuse_color  = texture(tex_diffuse,  fragUv).rgb * mat.diffuse;
     vec3 specular_color = texture(tex_specular, fragUv).rgb * mat.specular;

@@ -8,8 +8,8 @@ use super::{
 };
 use crate::camera::Camera;
 use crate::math::Mat4;
-use crate::renderer::ResourceManager;
 use crate::renderer::FrameData;
+use crate::renderer::ResourceManager;
 use crate::scene::ModelPushConstants;
 use crate::scene::Scene;
 use crate::scene::{MaterialPushConstants, Object};
@@ -219,9 +219,13 @@ impl Renderer {
         self.bind_pipeline_and_viewport(cmd, frame);
 
         unsafe {
-            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
+            device
+                .handle
+                .cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
             self.draw_meshes(&device.handle, &cmd, frame);
-            device.handle.cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
+            device
+                .handle
+                .cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
             self.draw_meshes(&device.handle, &cmd, frame);
             device.handle.cmd_end_render_pass(cmd);
         }

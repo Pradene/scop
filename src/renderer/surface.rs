@@ -3,11 +3,6 @@ use sdl3::video::Window;
 
 use crate::renderer::VkInstance;
 
-// use winit::{
-// raw_window_handle::{HasDisplayHandle, HasWindowHandle},
-// window::Window,
-// };
-
 pub struct VkSurface {
     pub loader: khr::surface::Instance,
     pub handle: vk::SurfaceKHR,

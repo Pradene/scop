@@ -35,7 +35,7 @@ impl Vertex {
         let uv_attribute = vk::VertexInputAttributeDescription {
             binding: 0,
             location: 2,
-            format: vk::Format::R32G32_SFLOAT, // Note: R32G32 (2 floats)
+            format: vk::Format::R32G32_SFLOAT,
             offset: std::mem::offset_of!(Vertex, uv) as u32,
         };
 
