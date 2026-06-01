@@ -47,13 +47,13 @@ impl VkTexture {
     ) -> Result<Self, String> {
         let device = context.device();
 
-        let staging = VkBuffer::<u8>::device_local(
+        let staging = VkBuffer::<u8>::host_visible(
             context,
-            queue,
-            command_pool,
-            pixels,
+            pixels.len(),
             vk::BufferUsageFlags::TRANSFER_SRC,
         )?;
+
+        staging.write(pixels);
 
         let format = vk::Format::R8G8B8A8_SRGB;
         let tiling = vk::ImageTiling::OPTIMAL;
