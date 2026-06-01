@@ -92,7 +92,6 @@ impl VkPhysicalDevice {
         handle: &vk::PhysicalDevice,
     ) -> Result<(i32, QueueFamiliesIndices), String> {
         let properties = unsafe { instance.get_physical_device_properties(*handle) };
-        let features = unsafe { instance.get_physical_device_features(*handle) };
         let queue_families = Self::find_queue_families(instance, &handle, surface_loader, surface);
 
         let mut score = 0;
@@ -103,8 +102,8 @@ impl VkPhysicalDevice {
 
         score += properties.limits.max_image_dimension2_d as i32;
 
-        if features.geometry_shader == 0 || queue_families.graphics_family.is_none() {
-            return Ok((0, queue_families)); // Skip if no geometry shader or graphics family
+        if queue_families.graphics_family.is_none() {
+            return Ok((0, queue_families));
         }
 
         return Ok((score, queue_families));

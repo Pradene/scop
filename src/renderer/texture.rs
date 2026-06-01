@@ -214,7 +214,7 @@ fn transition_image_layout(
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
 ) -> Result<(), String> {
-    let cmd = command_pool.begin_single_cmd(context.device())?;
+    let command_buffer = command_pool.begin_single_cmd()?;
 
     let (src_access, dst_access, src_stage, dst_stage) = match (old_layout, new_layout) {
         (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
@@ -253,7 +253,7 @@ fn transition_image_layout(
 
     unsafe {
         context.device().handle.cmd_pipeline_barrier(
-            cmd,
+            command_buffer,
             src_stage,
             dst_stage,
             vk::DependencyFlags::empty(),
@@ -263,7 +263,7 @@ fn transition_image_layout(
         );
     }
 
-    command_pool.end_single_cmd(context.device(), queue, cmd)
+    command_pool.end_single_cmd(queue, command_buffer)
 }
 
 fn copy_buffer_to_image(
@@ -275,11 +275,11 @@ fn copy_buffer_to_image(
     width: u32,
     height: u32,
 ) -> Result<(), String> {
-    let cmd = command_pool.begin_single_cmd(context.device())?;
+    let command_buffer = command_pool.begin_single_cmd()?;
 
     unsafe {
         context.device().handle.cmd_copy_buffer_to_image(
-            cmd,
+            command_buffer,
             buffer,
             image,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -303,5 +303,5 @@ fn copy_buffer_to_image(
         );
     }
 
-    command_pool.end_single_cmd(context.device(), queue, cmd)
+    command_pool.end_single_cmd(queue, command_buffer)
 }

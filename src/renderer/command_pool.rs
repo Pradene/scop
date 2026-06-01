@@ -58,13 +58,13 @@ impl VkCommandPool {
             .free_command_buffers(self.handle, buffers);
     }
 
-    pub fn begin_single_cmd(&self, device: Arc<VkDevice>) -> Result<vk::CommandBuffer, String> {
+    pub fn begin_single_cmd(&self) -> Result<vk::CommandBuffer, String> {
         let command_buffer = self
             .allocate_buffers(vk::CommandBufferLevel::PRIMARY, 1)?
             .remove(0);
 
         unsafe {
-            device
+            self.device
                 .handle
                 .begin_command_buffer(
                     command_buffer,
@@ -82,17 +82,16 @@ impl VkCommandPool {
 
     pub fn end_single_cmd(
         &self,
-        device: Arc<VkDevice>,
         queue: &VkQueue,
         command_buffer: vk::CommandBuffer,
     ) -> Result<(), String> {
         unsafe {
-            device
+            self.device
                 .handle
                 .end_command_buffer(command_buffer)
                 .map_err(|e| format!("Failed to end command buffer: {}", e))?;
 
-            device
+            self.device
                 .handle
                 .queue_submit(
                     queue.handle,
@@ -106,7 +105,7 @@ impl VkCommandPool {
                 )
                 .map_err(|e| format!("Failed to submit: {}", e))?;
 
-            device
+            self.device
                 .handle
                 .queue_wait_idle(queue.handle)
                 .map_err(|e| format!("Failed to wait idle: {}", e))?;

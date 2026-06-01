@@ -214,7 +214,19 @@ impl Renderer {
         let cmd = frame.command_buffer;
         let device = self.context.device();
 
-        self.begin_command_buffer(cmd)?;
+        unsafe {
+            device
+                .handle
+                .begin_command_buffer(
+                    cmd,
+                    &vk::CommandBufferBeginInfo {
+                        s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
+                        ..Default::default()
+                    },
+                )
+                .map_err(|e| format!("Failed to begin command buffer: {}", e))?;
+        }
+
         self.begin_render_pass(cmd, image_index);
         self.bind_pipeline_and_viewport(cmd, frame);
 
@@ -228,33 +240,14 @@ impl Renderer {
                 .cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
             self.draw_meshes(&device.handle, &cmd, frame);
             device.handle.cmd_end_render_pass(cmd);
-        }
 
-        self.end_command_buffer(cmd)
-    }
-
-    fn begin_command_buffer(&self, cmd: vk::CommandBuffer) -> Result<(), String> {
-        let begin_info = vk::CommandBufferBeginInfo {
-            s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
-            ..Default::default()
-        };
-        unsafe {
-            self.context
-                .device()
-                .handle
-                .begin_command_buffer(cmd, &begin_info)
-                .map_err(|e| format!("Failed to begin command buffer: {}", e))
-        }
-    }
-
-    fn end_command_buffer(&self, cmd: vk::CommandBuffer) -> Result<(), String> {
-        unsafe {
-            self.context
-                .device()
+            device
                 .handle
                 .end_command_buffer(cmd)
-                .map_err(|e| format!("Failed to end command buffer: {}", e))
+                .map_err(|e| format!("Failed to end command buffer: {}", e))?;
         }
+
+        Ok(())
     }
 
     fn begin_render_pass(&self, cmd: vk::CommandBuffer, image_index: u32) {
