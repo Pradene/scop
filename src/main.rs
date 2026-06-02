@@ -20,7 +20,7 @@ fn main() -> Result<(), String> {
 
     let mut app: App = App::new(camera, width, height)?;
     let handle = app.load_object(Path::new("assets/teapot.obj"))?;
-    
+
     let start = Instant::now();
 
     loop {
@@ -35,7 +35,7 @@ fn main() -> Result<(), String> {
         let transform = Mat4::identity().rotate(angle, Vec3::Y);
 
         app.get_object(handle).update_transform(transform);
-        
+
         app.update();
         app.draw();
     }

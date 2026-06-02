@@ -401,7 +401,7 @@ impl Renderer {
 
     fn draw_submesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, submesh: &SubMesh) {
         let mat = self.resources.get_material(submesh.material);
-        let fpc = MaterialPushConstants{
+        let fpc = MaterialPushConstants {
             ambient: mat.ka.unwrap_or(Vec3::new(0.1, 0.1, 0.1)),
             dissolve: mat.dissolve.unwrap_or(1.0),
             diffuse: mat.kd.unwrap_or(Vec3::new(0.7, 0.7, 0.7)),

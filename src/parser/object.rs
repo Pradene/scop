@@ -17,8 +17,9 @@ impl ObjectParser {
         let file = File::open(path_ref).map_err(|e| format!("Failed to open OBJ: {}", e))?;
         let reader = BufReader::new(file);
 
+        let mut sum = Vec3::ZERO;
         let mut object = Object::default();
-        let mut current_group = Group::new("default".to_string());
+        let mut current_group = Group::default();
         let mut current_material: Option<String> = None;
 
         for line_result in reader.lines() {
@@ -40,6 +41,7 @@ impl ObjectParser {
                 "v" => {
                     let v = Self::to_vec3(remainder).ok_or("Invalid vertex coordinates")?;
                     object.vertices.push(v);
+                    sum += v;
                 }
                 "vn" => {
                     let v = Self::to_vec3(remainder).ok_or("Invalid normal coordinates")?;
@@ -50,15 +52,10 @@ impl ObjectParser {
                     object.textures.push(v);
                 }
                 "g" | "o" => {
-                    if !current_group.is_empty() {
+                    if !current_group.faces.is_empty() {
                         object.groups.push(current_group);
                     }
-                    let name = if remainder.is_empty() {
-                        "unnamed".to_string()
-                    } else {
-                        remainder.join(" ")
-                    };
-                    current_group = Group::new(name);
+                    current_group = Group::default();
                     current_group.material = current_material.clone();
                 }
                 "f" => Self::parse_face(remainder, &mut current_group, &object)?,
@@ -75,14 +72,9 @@ impl ObjectParser {
                     } else {
                         Some(remainder.join(" "))
                     };
-                    if !current_group.is_empty() {
+                    if !current_group.faces.is_empty() {
                         object.groups.push(current_group);
-                        let group_name = format!(
-                            "{}_{}",
-                            remainder.first().unwrap_or(&"mat"),
-                            object.groups.len()
-                        );
-                        current_group = Group::new(group_name);
+                        current_group = Group::default();
                     }
                     current_material = new_material;
                     current_group.material = current_material.clone();
@@ -91,8 +83,14 @@ impl ObjectParser {
             }
         }
 
-        if !current_group.is_empty() {
+        if !current_group.faces.is_empty() {
             object.groups.push(current_group);
+        }
+
+        let center = sum / object.vertices.len() as f32;
+
+        for vertex in &mut object.vertices {
+            *vertex -= center;
         }
 
         Ok(object)
@@ -102,9 +100,8 @@ impl ObjectParser {
         if face_tokens.len() < 3 {
             return Err("Face needs at least 3 vertices".to_string());
         }
-        let mut face = Vec::with_capacity(face_tokens.len());
 
-        for vertex_str in face_tokens {
+        let parse_vertex = |vertex_str: &str| -> Result<FaceVertex, String> {
             let indices: Vec<&str> = vertex_str.split('/').collect();
 
             let vertex_index = indices
@@ -137,16 +134,24 @@ impl ObjectParser {
                 }
             }
 
-            face.push(FaceVertex {
+            Ok(FaceVertex {
                 vertex: vertex_index,
                 texture: texture_index,
                 normal: normal_index,
-            });
+            })
+        };
+
+        let first_vertex = parse_vertex(face_tokens[0])?;
+        let mut prev = parse_vertex(face_tokens[1])?;
+
+        for token in &face_tokens[2..] {
+            let current = parse_vertex(token)?;
+
+            group.faces.push([first_vertex, prev, current]);
+
+            prev = current;
         }
 
-        for triangle in Object::triangulate_face(&face) {
-            group.faces.push(triangle);
-        }
         Ok(())
     }
 

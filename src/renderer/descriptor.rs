@@ -131,8 +131,8 @@ pub struct VkDescriptorSetLayout {
 impl VkDescriptorSetLayout {
     pub fn new(device: Arc<VkDevice>) -> Result<VkDescriptorSetLayout, String> {
         let binding_flags = [
-            vk::DescriptorBindingFlags::empty(),                          // binding 0: UBO
-            vk::DescriptorBindingFlags::PARTIALLY_BOUND                   // binding 1: texture array
+            vk::DescriptorBindingFlags::empty(),
+            vk::DescriptorBindingFlags::PARTIALLY_BOUND
                 | vk::DescriptorBindingFlags::UPDATE_AFTER_BIND,
         ];
 
@@ -161,7 +161,7 @@ impl VkDescriptorSetLayout {
                 stage_flags: vk::ShaderStageFlags::FRAGMENT,
                 p_immutable_samplers: std::ptr::null(),
                 ..Default::default()
-            }
+            },
         ];
 
         let create_info = vk::DescriptorSetLayoutCreateInfo {

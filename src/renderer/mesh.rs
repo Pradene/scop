@@ -1,4 +1,7 @@
-use crate::{math::Mat4, renderer::{Vertex, MaterialHandle, VkBuffer}};
+use crate::{
+    math::Mat4,
+    renderer::{MaterialHandle, Vertex, VkBuffer},
+};
 
 pub struct SubMesh {
     pub index_offset: u32,

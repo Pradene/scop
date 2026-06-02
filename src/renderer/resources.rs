@@ -4,7 +4,7 @@ use std::path::Path;
 use super::{VkCommandPool, VkContext, VkQueue, VkTexture};
 use crate::math::Mat4;
 use crate::parser::ObjectParser;
-use crate::renderer::{Vertex, VkBuffer, Mesh, SubMesh};
+use crate::renderer::{Mesh, SubMesh, Vertex, VkBuffer};
 use crate::scene::{Material, Object, RawMaterial};
 use ash::vk;
 
