@@ -4,25 +4,71 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use crate::math::Vec3;
-use crate::scene::RawMaterial;
+use crate::renderer::{TextureHandle};
 
-pub struct MaterialParser;
+#[derive(Debug, Clone)]
+pub struct GpuMaterial {
+    pub ka: Option<Vec3>,
+    pub kd: Option<Vec3>,
+    pub ks: Option<Vec3>,
+    pub ns: Option<f32>,
+    pub ni: Option<f32>,
+    pub dissolve: Option<f32>,
+    pub illum: Option<i32>,
+    pub map_ka: Option<TextureHandle>,
+    pub map_kd: Option<TextureHandle>,
+    pub map_ks: Option<TextureHandle>,
+}
 
-impl MaterialParser {
-    pub fn parse<P: AsRef<Path>>(path: P) -> Result<HashMap<String, RawMaterial>, String> {
+impl Default for GpuMaterial {
+    fn default() -> Self {
+        Self {
+            ka: Some(Vec3::new(0.7, 0.8, 0.6)),
+            kd: Some(Vec3::new(0.7, 0.8, 0.6)),
+            ks: Some(Vec3::new(0.7, 0.8, 0.6)),
+            ns: Some(0.5),
+            ni: Some(0.5),
+            dissolve: Some(0.5),
+            illum: Some(1),
+            map_ka: Some(0),
+            map_kd: Some(0),
+            map_ks: Some(0),
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct Material {
+    pub ka: Option<Vec3>,
+    pub kd: Option<Vec3>,
+    pub ks: Option<Vec3>,
+    pub ns: Option<f32>,
+    pub ni: Option<f32>,
+    pub dissolve: Option<f32>,
+    pub illum: Option<i32>,
+    pub map_ka: Option<String>,
+    pub map_kd: Option<String>,
+    pub map_ks: Option<String>,
+}
+
+pub struct MtlFileParser;
+
+impl MtlFileParser {
+    pub fn parse<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Material>, String> {
         let file = File::open(path).map_err(|e| format!("Failed to open MTL: {}", e))?;
         let reader = BufReader::new(file);
 
         let mut materials = HashMap::new();
-        let mut current = RawMaterial::default();
+        let mut current = Material::default();
+        let mut name = String::new();
 
         for line_result in reader.lines() {
             let line = line_result.map_err(|e| format!("Error reading file: {}", e))?;
-            Self::parse_line(&line, &mut current, &mut materials)?;
+            Self::parse_line(&line, &mut name, &mut current, &mut materials)?;
         }
 
-        if !current.name.is_empty() {
-            materials.insert(current.name.clone(), current);
+        if !name.is_empty() {
+            materials.insert(name.clone(), current);
         }
 
         Ok(materials)
@@ -30,8 +76,9 @@ impl MaterialParser {
 
     fn parse_line(
         line: &str,
-        current: &mut RawMaterial,
-        materials: &mut HashMap<String, RawMaterial>,
+        name: &mut String,
+        current: &mut Material,
+        materials: &mut HashMap<String, Material>,
     ) -> Result<(), String> {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -44,11 +91,11 @@ impl MaterialParser {
 
         match tag {
             "newmtl" => {
-                if !current.name.is_empty() {
-                    materials.insert(current.name.clone(), current.clone());
+                if !name.is_empty() {
+                    materials.insert(name.clone(), current.clone());
                 }
-                *current = RawMaterial::default();
-                current.name = rem.join(" ");
+                *current = Material::default();
+                *name = rem.join(" ");
             }
             "Ka" => current.ka = Some(Self::to_vec3(rem).ok_or("Invalid Ambient Color (Ka)")?),
             "Kd" => current.kd = Some(Self::to_vec3(rem).ok_or("Invalid Diffuse Color (Kd)")?),

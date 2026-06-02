@@ -3,9 +3,8 @@ use std::path::Path;
 
 use super::{VkCommandPool, VkContext, VkQueue, VkTexture};
 use crate::math::Mat4;
-use crate::parser::ObjectParser;
-use crate::renderer::{Mesh, SubMesh, Vertex, VkBuffer};
-use crate::scene::{Material, Object, RawMaterial};
+use crate::parser::{ObjFileParser, GpuMaterial, Mesh, Material};
+use crate::renderer::{GpuMesh, GpuPrimitive, Vertex, VkBuffer};
 use ash::vk;
 
 pub type TextureHandle = usize;
@@ -16,10 +15,10 @@ pub struct ResourceManager {
     pub textures: Vec<VkTexture>,
     pub texture_cache: HashMap<String, TextureHandle>,
 
-    pub materials: Vec<Material>,
+    pub materials: Vec<GpuMaterial>,
     pub material_cache: HashMap<String, MaterialHandle>,
 
-    pub meshes: Vec<Mesh>,
+    pub meshes: Vec<GpuMesh>,
     pub mesh_cache: HashMap<String, MeshHandle>,
 }
 
@@ -30,7 +29,7 @@ impl ResourceManager {
         command_pool: &VkCommandPool,
     ) -> Result<Self, String> {
         let white = VkTexture::white(&context, graphics_queue, command_pool)?;
-        let default_material = Material::default();
+        let default_material = GpuMaterial::default();
 
         Ok(Self {
             textures: vec![white],
@@ -78,15 +77,15 @@ impl ResourceManager {
         }
     }
 
-    /// Converts a RawMaterial (string paths) into a Material (TextureHandles),
+    /// Converts a Material (string paths) into a GpuMaterial (TextureHandles),
     /// uploading any textures that haven't been loaded yet.
     fn resolve_material(
         &mut self,
         context: &VkContext,
         queue: &VkQueue,
         command_pool: &VkCommandPool,
-        raw: &RawMaterial,
-    ) -> Material {
+        raw: &Material,
+    ) -> GpuMaterial {
         let map_kd = raw
             .map_kd
             .as_deref()
@@ -102,7 +101,7 @@ impl ResourceManager {
             .as_deref()
             .map(|p| self.load_texture(context, queue, command_pool, p));
 
-        Material {
+        GpuMaterial {
             ka: raw.ka,
             kd: raw.kd,
             ks: raw.ks,
@@ -126,11 +125,11 @@ impl ResourceManager {
         let path_str = path.as_ref().to_string_lossy().to_string();
 
         if let Some(&handle) = self.mesh_cache.get(&path_str) {
-            return Ok((handle, 0..0)); // already registered
+            return Ok((handle, 0..0));
         }
 
         let textures_before = self.textures.len();
-        let object = ObjectParser::parse(&path)?;
+        let object = ObjFileParser::parse(&path)?;
         let handle = self.upload_object(context, queue, command_pool, &object)?;
         let textures_after = self.textures.len();
 
@@ -143,53 +142,43 @@ impl ResourceManager {
         context: &VkContext,
         queue: &VkQueue,
         command_pool: &VkCommandPool,
-        object: &Object,
+        mesh: &Mesh,
     ) -> Result<MeshHandle, String> {
         let mut all_vertices: Vec<Vertex> = Vec::new();
         let mut all_indices: Vec<u32> = Vec::new();
-        let mut primitives: Vec<SubMesh> = Vec::new();
+        let mut primitives: Vec<GpuPrimitive> = Vec::new();
 
-        // Resolve RawMaterial (string paths) → Material (TextureHandles)
-        for (name, raw) in &object.materials {
-            if self.material_cache.contains_key(name) {
-                continue; // already loaded (e.g. shared MTL across objects)
+        for (name, raw) in &mesh.materials {
+            if !self.material_cache.contains_key(name) {
+                let mat = self.resolve_material(context, queue, command_pool, raw);
+                let handle = self.materials.len();
+                self.materials.push(mat);
+                self.material_cache.insert(name.clone(), handle);
             }
-            let material = self.resolve_material(context, queue, command_pool, raw);
-            let handle = self.materials.len();
-            self.materials.push(material);
-            self.material_cache.insert(name.clone(), handle);
         }
 
-        for group in &object.groups {
-            let (vertices, indices) = object.get_group_vertices_and_indices(group);
-            if indices.is_empty() {
-                continue;
-            }
+        for submesh in &mesh.submeshes {
+            if submesh.indices.is_empty() { continue; }
 
             let index_offset = all_indices.len() as u32;
-            let index_count = indices.len() as u32;
             let vertex_offset = all_vertices.len() as i32;
-
-            let material = group
-                .material
-                .as_deref()
-                .and_then(|name| self.material_cache.get(name))
+            let material = submesh.material.as_deref()
+                .and_then(|n| self.material_cache.get(n))
                 .copied()
                 .unwrap_or(Self::default_material());
 
-            all_vertices.extend_from_slice(&vertices);
-            all_indices.extend_from_slice(&indices);
-
-            primitives.push(SubMesh {
+            all_vertices.extend_from_slice(&submesh.vertices);
+            all_indices.extend_from_slice(&submesh.indices);
+            primitives.push(GpuPrimitive {
                 index_offset,
-                index_count,
+                index_count: submesh.indices.len() as u32,
                 vertex_offset,
                 material,
             });
         }
 
         if all_vertices.is_empty() || all_indices.is_empty() {
-            return Err("Object has no geometry".to_string());
+            return Err("Mesh has no geometry".to_string());
         }
 
         let vertex_buffer = VkBuffer::device_local(
@@ -209,7 +198,7 @@ impl ResourceManager {
         )?;
 
         let handle = self.meshes.len();
-        self.meshes.push(Mesh {
+        self.meshes.push(GpuMesh {
             vertex_buffer,
             index_buffer,
             primitives,
@@ -223,11 +212,11 @@ impl ResourceManager {
         &self.textures[handle]
     }
 
-    pub fn get_material(&self, handle: MaterialHandle) -> &Material {
+    pub fn get_material(&self, handle: MaterialHandle) -> &GpuMaterial {
         &self.materials[handle]
     }
 
-    pub fn get_mesh(&mut self, handle: MeshHandle) -> &mut Mesh {
+    pub fn get_mesh(&mut self, handle: MeshHandle) -> &mut GpuMesh {
         &mut self.meshes[handle]
     }
 }

@@ -6,7 +6,7 @@ layout(location = 0) in vec3 fragPosition;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragUv;
 
-layout(push_constant) uniform Material {
+layout(push_constant) uniform GpuMaterial {
     layout(offset = 64)
     vec3 ambient;
     float dissolve;

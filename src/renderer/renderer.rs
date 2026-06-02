@@ -15,7 +15,7 @@ use crate::renderer::FrameData;
 use crate::renderer::MeshHandle;
 use crate::renderer::MeshPushConstants;
 use crate::renderer::ResourceManager;
-use crate::renderer::{Mesh, SubMesh};
+use crate::renderer::{GpuMesh, GpuPrimitive};
 
 // use winit::window::Window;
 use sdl3::video::Window;
@@ -378,7 +378,7 @@ impl Renderer {
         }
     }
 
-    fn bind_mesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, mesh: &Mesh) {
+    fn bind_mesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, mesh: &GpuMesh) {
         let vpc = MeshPushConstants {
             transform: mesh.transform,
         };
@@ -399,7 +399,7 @@ impl Renderer {
         }
     }
 
-    fn draw_submesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, submesh: &SubMesh) {
+    fn draw_submesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, submesh: &GpuPrimitive) {
         let mat = self.resources.get_material(submesh.material);
         let fpc = MaterialPushConstants {
             ambient: mat.ka.unwrap_or(Vec3::new(0.1, 0.1, 0.1)),
@@ -498,7 +498,7 @@ impl Renderer {
         self.context.device().wait_idle();
     }
 
-    pub fn get_mesh(&mut self, handle: MeshHandle) -> &mut Mesh {
+    pub fn get_mesh(&mut self, handle: MeshHandle) -> &mut GpuMesh {
         self.resources.get_mesh(handle)
     }
 }

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::camera::Camera;
-use crate::renderer::{Mesh, MeshHandle, Renderer};
+use crate::renderer::{GpuMesh, MeshHandle, Renderer};
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::Keycode;
 use sdl3::mouse::MouseButton;
@@ -198,7 +198,7 @@ impl App {
         self.renderer.load_object(path)
     }
 
-    pub fn get_object(&mut self, handle: MeshHandle) -> &mut Mesh {
+    pub fn get_object(&mut self, handle: MeshHandle) -> &mut GpuMesh {
         self.renderer.get_mesh(handle)
     }
 }
