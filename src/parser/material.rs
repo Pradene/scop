@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use crate::math::Vec3;
-use crate::renderer::{TextureHandle};
+use crate::renderer::TextureHandle;
 
 #[derive(Debug, Clone)]
 pub struct GpuMaterial {

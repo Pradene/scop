@@ -1,6 +1,6 @@
 use ash::{khr, vk};
 
-use crate::renderer::{VkContext, VkInstance, VkPhysicalDevice};
+use crate::renderer::{VkInstance, VkPhysicalDevice};
 
 #[derive(Clone)]
 pub struct SwapChainSupportDetails {
@@ -48,12 +48,14 @@ pub fn find_depth_format(
         vk::Format::D32_SFLOAT_S8_UINT,
         vk::Format::D24_UNORM_S8_UINT,
     ];
+
     for format in candidates {
         let props = unsafe {
             instance
                 .handle
                 .get_physical_device_format_properties(physical_device.handle, format)
         };
+
         if (props.optimal_tiling_features & vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
             == vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT
         {
@@ -61,28 +63,4 @@ pub fn find_depth_format(
         }
     }
     Err("Failed to find supported depth format".to_string())
-}
-
-pub fn find_memory_type(
-    context: &VkContext,
-    type_filter: u32,
-    properties: vk::MemoryPropertyFlags,
-) -> Result<u32, String> {
-    let memory_properties = unsafe {
-        context
-            .instance
-            .handle
-            .get_physical_device_memory_properties(context.physical_device.handle)
-    };
-
-    for index in 0..memory_properties.memory_type_count {
-        if (type_filter & (1 << index) != 0)
-            && ((memory_properties.memory_types[index as usize].property_flags & properties)
-                == properties)
-        {
-            return Ok(index);
-        }
-    }
-
-    Err("Failed to find suitable memory type for requirements".to_string())
 }

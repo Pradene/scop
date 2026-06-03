@@ -1,8 +1,6 @@
 use ash::vk;
 use std::sync::Arc;
 
-use crate::renderer::find_memory_type;
-
 use super::{VkBuffer, VkCommandPool, VkContext, VkDevice, VkQueue};
 
 pub struct VkTexture {
@@ -88,8 +86,9 @@ impl VkTexture {
         };
 
         let memory_requirements = unsafe { device.handle.get_image_memory_requirements(handle) };
-        let memory_type =
-            find_memory_type(context, memory_requirements.memory_type_bits, properties)?;
+        let memory_type = context
+            .physical_device
+            .find_memory_type(memory_requirements.memory_type_bits, properties)?;
 
         let allocate_info = vk::MemoryAllocateInfo {
             s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,

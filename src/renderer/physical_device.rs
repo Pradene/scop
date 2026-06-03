@@ -11,6 +11,7 @@ pub struct VkPhysicalDevice {
     pub handle: vk::PhysicalDevice,
     pub queue_families: QueueFamiliesIndices,
     pub swapchain_support: SwapChainSupportDetails,
+    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
 }
 
 impl VkPhysicalDevice {
@@ -21,10 +22,17 @@ impl VkPhysicalDevice {
             &surface.handle,
         )?;
 
+        let memory_properties = unsafe {
+            instance
+                .handle
+                .get_physical_device_memory_properties(handle)
+        };
+
         return Ok(VkPhysicalDevice {
             handle,
             queue_families,
             swapchain_support,
+            memory_properties,
         });
     }
 
@@ -63,11 +71,8 @@ impl VkPhysicalDevice {
             let (score, queue_families) =
                 Self::rate_device(instance, surface_loader, surface, &handle)?;
 
-            let swapchain_support;
-            match query_swapchain_support(&handle, surface_loader, surface) {
-                Ok(value) => swapchain_support = value,
-                Err(e) => return Err(format!("Swapchain not supported: {}", e)),
-            }
+            let swapchain_support = query_swapchain_support(&handle, surface_loader, surface)
+                .map_err(|e| format!("Swapchain not supported: {}", e))?;
 
             if score > 0 {
                 if Self::is_device_suitable(instance, &handle, &queue_families, &swapchain_support)
@@ -177,5 +182,23 @@ impl VkPhysicalDevice {
             graphics_family,
             present_family,
         };
+    }
+
+    pub fn find_memory_type(
+        &self,
+        type_filter: u32,
+        properties: vk::MemoryPropertyFlags,
+    ) -> Result<u32, String> {
+        for index in 0..self.memory_properties.memory_type_count {
+            if (type_filter & (1 << index) != 0)
+                && ((self.memory_properties.memory_types[index as usize].property_flags
+                    & properties)
+                    == properties)
+            {
+                return Ok(index);
+            }
+        }
+
+        Err("Failed to find suitable memory type for requirements".to_string())
     }
 }

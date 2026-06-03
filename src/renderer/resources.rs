@@ -3,7 +3,7 @@ use std::path::Path;
 
 use super::{VkCommandPool, VkContext, VkQueue, VkTexture};
 use crate::math::Mat4;
-use crate::parser::{ObjFileParser, GpuMaterial, Mesh, Material};
+use crate::parser::{GpuMaterial, Material, Mesh, ObjFileParser};
 use crate::renderer::{GpuMesh, GpuPrimitive, Vertex, VkBuffer};
 use ash::vk;
 
@@ -158,11 +158,15 @@ impl ResourceManager {
         }
 
         for submesh in &mesh.submeshes {
-            if submesh.indices.is_empty() { continue; }
+            if submesh.indices.is_empty() {
+                continue;
+            }
 
             let index_offset = all_indices.len() as u32;
             let vertex_offset = all_vertices.len() as i32;
-            let material = submesh.material.as_deref()
+            let material = submesh
+                .material
+                .as_deref()
                 .and_then(|n| self.material_cache.get(n))
                 .copied()
                 .unwrap_or(Self::default_material());

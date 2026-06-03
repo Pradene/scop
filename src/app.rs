@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::math::Vec3;
 use crate::camera::Camera;
 use crate::renderer::{GpuMesh, MeshHandle, Renderer};
 use sdl3::event::{Event, WindowEvent};
@@ -31,7 +32,10 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(camera: Camera, width: u32, height: u32) -> Result<App, String> {
+    pub fn new() -> Result<App, String> {
+        let width: u32 = 800;
+        let height: u32 = 600;
+        
         let sdl_context = sdl3::init().map_err(|e| format!("Failed to init SDL3: {}", e))?;
 
         let video_subsystem = sdl_context
@@ -52,6 +56,15 @@ impl App {
         let event_pump = sdl_context
             .event_pump()
             .map_err(|e| format!("Failed to get event pump: {}", e))?;
+
+        let camera = Camera::new(
+            Vec3::new(0., 0., -200.),
+            Vec3::ZERO,
+            45f32.to_radians(),
+            width as f32 / height as f32,
+            0.1,
+            500.,
+        );
 
         Ok(App {
             sdl_context,

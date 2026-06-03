@@ -1,4 +1,3 @@
-use super::find_memory_type;
 use super::{VkCommandPool, VkContext, VkDevice, VkQueue};
 use ash::vk;
 use std::ffi::c_void;
@@ -146,8 +145,9 @@ pub fn create_buffer(
 
     let memory_requirements = unsafe { device.handle.get_buffer_memory_requirements(buffer) };
 
-    let memory_type_index =
-        find_memory_type(context, memory_requirements.memory_type_bits, *properties)?;
+    let memory_type_index = context
+        .physical_device
+        .find_memory_type(memory_requirements.memory_type_bits, *properties)?;
 
     let allocate_info = vk::MemoryAllocateInfo {
         s_type: vk::StructureType::MEMORY_ALLOCATE_INFO,
