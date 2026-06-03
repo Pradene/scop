@@ -1,6 +1,6 @@
 use crate::{
     math::{Mat4, Vec3},
-    renderer::{MaterialHandle, TextureHandle, Vertex, VkBuffer},
+    renderer::{MaterialHandle, ResourcesManager, TextureHandle, Vertex, VkBuffer},
 };
 
 #[derive(Debug, Clone)]
@@ -19,6 +19,8 @@ pub struct GpuMaterial {
 
 impl Default for GpuMaterial {
     fn default() -> Self {
+        let white = ResourcesManager::white_texture();
+
         Self {
             ka: Some(Vec3::new(0.7, 0.8, 0.6)),
             kd: Some(Vec3::new(0.7, 0.8, 0.6)),
@@ -27,9 +29,9 @@ impl Default for GpuMaterial {
             ni: Some(0.5),
             dissolve: Some(0.5),
             illum: Some(1),
-            map_ka: Some(0),
-            map_kd: Some(0),
-            map_ks: Some(0),
+            map_ka: Some(white),
+            map_kd: Some(white),
+            map_ks: Some(white),
         }
     }
 }
@@ -46,6 +48,24 @@ pub struct MaterialPushConstants {
     pub tex_diffuse: u32,
     pub tex_ambient: u32,
     pub tex_specular: u32,
+}
+
+impl From<&GpuMaterial> for MaterialPushConstants {
+    fn from(mat: &GpuMaterial) -> Self {
+        let white = ResourcesManager::white_texture();
+        Self {
+            ambient: mat.ka.unwrap_or(Vec3::new(0.1, 0.1, 0.1)),
+            diffuse: mat.kd.unwrap_or(Vec3::new(0.7, 0.7, 0.7)),
+            specular: mat.ks.unwrap_or(Vec3::new(1.0, 1.0, 1.0)),
+            shininess: mat.ns.unwrap_or(32.0),
+            optical_density: mat.ni.unwrap_or(1.0),
+            dissolve: mat.dissolve.unwrap_or(1.0),
+            illum: mat.illum.unwrap_or(2),
+            tex_diffuse: mat.map_kd.unwrap_or(white) as u32,
+            tex_specular: mat.map_ks.unwrap_or(white) as u32,
+            tex_ambient: mat.map_ka.unwrap_or(white) as u32,
+        }
+    }
 }
 
 pub struct GpuPrimitive {

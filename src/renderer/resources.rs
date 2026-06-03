@@ -102,11 +102,7 @@ impl ResourcesManager {
         }
     }
 
-    pub fn load_mesh(
-        &mut self,
-        context: &VkContext,
-        mesh: &Mesh,
-    ) -> Result<MeshHandle, String> {
+    pub fn load_mesh(&mut self, context: &VkContext, mesh: &Mesh) -> Result<MeshHandle, String> {
         let mut all_vertices: Vec<Vertex> = Vec::new();
         let mut all_indices: Vec<u32> = Vec::new();
         let mut primitives: Vec<GpuPrimitive> = Vec::new();

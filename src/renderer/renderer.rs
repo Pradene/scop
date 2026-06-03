@@ -5,9 +5,9 @@ use ash::vk;
 use super::query_swapchain_support;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
-    FrameData, GpuMesh, GpuPrimitive, MeshPushConstants, ResourcesManager,
+    FrameData, GpuMesh, GpuPrimitive, MaterialPushConstants, MeshPushConstants, ResourcesManager,
     VkCommandPool, VkContext, VkDescriptorPool, VkDescriptorSetLayout, VkPipeline, VkQueue,
-    VkRenderPass, VkSwapchain, MaterialPushConstants
+    VkRenderPass, VkSwapchain,
 };
 use crate::camera::Camera;
 use crate::math::Mat4;
@@ -364,18 +364,7 @@ impl Renderer {
         resources: &ResourcesManager,
     ) {
         let mat = resources.get_material(submesh.material);
-        let fpc = MaterialPushConstants {
-            ambient: mat.ka.unwrap_or(Vec3::new(0.1, 0.1, 0.1)),
-            dissolve: mat.dissolve.unwrap_or(1.0),
-            diffuse: mat.kd.unwrap_or(Vec3::new(0.7, 0.7, 0.7)),
-            shininess: mat.ns.unwrap_or(32.0),
-            specular: mat.ks.unwrap_or(Vec3::new(1.0, 1.0, 1.0)),
-            optical_density: mat.ni.unwrap_or(1.0),
-            illum: mat.illum.unwrap_or(2),
-            tex_diffuse: mat.map_kd.unwrap_or(ResourcesManager::white_texture()) as u32,
-            tex_specular: mat.map_ks.unwrap_or(ResourcesManager::white_texture()) as u32,
-            tex_ambient: mat.map_ka.unwrap_or(ResourcesManager::white_texture()) as u32,
-        };
+        let fpc = MaterialPushConstants::from(mat);
 
         let device = &self.context.device;
         unsafe {
