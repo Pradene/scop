@@ -133,29 +133,17 @@ impl VkTexture {
                 .map_err(|e| format!("Failed to create image view: {}", e))?
         };
 
-        transition_image_layout(
-            context,
+        command_pool.transition_image_layout(
             queue,
-            command_pool,
             handle,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         )?;
 
-        copy_buffer_to_image(
-            context,
-            queue,
-            command_pool,
-            staging.handle,
-            handle,
-            width,
-            height,
-        )?;
+        command_pool.copy_buffer_to_image(queue, staging.handle, handle, width, height)?;
 
-        transition_image_layout(
-            context,
+        command_pool.transition_image_layout(
             queue,
-            command_pool,
             handle,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -203,104 +191,4 @@ impl Drop for VkTexture {
             self.device.handle.destroy_image(self.handle, None);
         }
     }
-}
-
-fn transition_image_layout(
-    context: &VkContext,
-    queue: &VkQueue,
-    command_pool: &VkCommandPool,
-    image: vk::Image,
-    old_layout: vk::ImageLayout,
-    new_layout: vk::ImageLayout,
-) -> Result<(), String> {
-    let command_buffer = command_pool.begin_single_cmd()?;
-
-    let (src_access, dst_access, src_stage, dst_stage) = match (old_layout, new_layout) {
-        (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
-            vk::AccessFlags::empty(),
-            vk::AccessFlags::TRANSFER_WRITE,
-            vk::PipelineStageFlags::TOP_OF_PIPE,
-            vk::PipelineStageFlags::TRANSFER,
-        ),
-        (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
-            vk::AccessFlags::TRANSFER_WRITE,
-            vk::AccessFlags::SHADER_READ,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::PipelineStageFlags::FRAGMENT_SHADER,
-        ),
-        _ => return Err("Unsupported layout transition".to_string()),
-    };
-
-    let barrier = vk::ImageMemoryBarrier {
-        s_type: vk::StructureType::IMAGE_MEMORY_BARRIER,
-        old_layout,
-        new_layout,
-        src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-        dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-        image,
-        subresource_range: vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        },
-        src_access_mask: src_access,
-        dst_access_mask: dst_access,
-        ..Default::default()
-    };
-
-    unsafe {
-        context.device().handle.cmd_pipeline_barrier(
-            command_buffer,
-            src_stage,
-            dst_stage,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            &[barrier],
-        );
-    }
-
-    command_pool.end_single_cmd(queue, command_buffer)
-}
-
-fn copy_buffer_to_image(
-    context: &VkContext,
-    queue: &VkQueue,
-    command_pool: &VkCommandPool,
-    buffer: vk::Buffer,
-    image: vk::Image,
-    width: u32,
-    height: u32,
-) -> Result<(), String> {
-    let command_buffer = command_pool.begin_single_cmd()?;
-
-    unsafe {
-        context.device().handle.cmd_copy_buffer_to_image(
-            command_buffer,
-            buffer,
-            image,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            &[vk::BufferImageCopy {
-                buffer_offset: 0,
-                buffer_row_length: 0,
-                buffer_image_height: 0,
-                image_subresource: vk::ImageSubresourceLayers {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    mip_level: 0,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                },
-                image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
-                image_extent: vk::Extent3D {
-                    width,
-                    height,
-                    depth: 1,
-                },
-            }],
-        );
-    }
-
-    command_pool.end_single_cmd(queue, command_buffer)
 }

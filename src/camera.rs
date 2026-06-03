@@ -65,8 +65,7 @@ impl Camera {
     }
 
     pub fn move_forward(&mut self, amount: f32) {
-        let flat = Vec3::new(self.forward().x, 0.0, self.forward().z).normalize();
-        self.position = self.position + flat * amount;
+        self.position = self.position + self.forward() * amount;
     }
 
     pub fn move_right(&mut self, amount: f32) {

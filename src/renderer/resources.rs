@@ -1,11 +1,10 @@
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 
 use super::{VkCommandPool, VkContext, VkDevice, VkQueue, VkTexture};
 use crate::math::Mat4;
-use crate::parser::{GpuMaterial, Material, Mesh, ObjFileParser};
-use crate::renderer::{GpuMesh, GpuPrimitive, Vertex, VkBuffer};
+use crate::parser::{Material, Mesh};
+use crate::renderer::{GpuMaterial, GpuMesh, GpuPrimitive, Vertex, VkBuffer};
 use ash::vk;
 
 pub type TextureHandle = usize;
@@ -28,9 +27,7 @@ pub struct ResourcesManager {
 }
 
 impl ResourcesManager {
-    pub fn new(
-        context: Arc<VkContext>,
-    ) -> Result<Self, String> {
+    pub fn new(context: Arc<VkContext>) -> Result<Self, String> {
         let upload_queue = VkQueue::new(context.device(), context.graphics_family());
         let upload_pool = VkCommandPool::new(
             context.device(),

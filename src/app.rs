@@ -1,9 +1,7 @@
-use std::path::Path;
-
 use crate::camera::Camera;
 use crate::math::Vec3;
 use crate::parser::Mesh;
-use crate::renderer::{Engine, GpuMesh, MeshHandle, Renderer};
+use crate::renderer::{Engine, MeshHandle};
 
 use sdl3::{
     event::{Event, WindowEvent},

@@ -1,9 +1,8 @@
 use std::path::Path;
 use std::time::Instant;
 
-use scop::parser::ObjFileParser;
 use scop::app::App;
-use scop::camera::Camera;
+use scop::parser::ObjFileParser;
 
 fn main() -> Result<(), String> {
     let mut app: App = App::new()?;

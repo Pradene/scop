@@ -82,12 +82,10 @@ impl VkPhysicalDevice {
             }
         }
 
-        return candidates.iter().rev().next().map_or_else(
-            || Err("Failed to find a suitable GPU.".to_string()),
-            |(_, (device, queue_family, swapchain_support))| {
-                Ok((*device, queue_family.clone(), swapchain_support.clone()))
-            },
-        );
+        return candidates
+            .into_values()
+            .last()
+            .ok_or("Failed to find a suitable GPU.".to_string());
     }
 
     fn rate_device(
@@ -111,7 +109,7 @@ impl VkPhysicalDevice {
             return Ok((0, queue_families));
         }
 
-        return Ok((score, queue_families));
+        Ok((score, queue_families))
     }
 
     fn is_device_suitable(
@@ -137,10 +135,10 @@ impl VkPhysicalDevice {
             }
         }
 
-        return required_extensions.is_empty()
+        required_extensions.is_empty()
             && queue_families.graphics_family.is_some()
             && !swapchain_support.formats.is_empty()
-            && !swapchain_support.present_modes.is_empty();
+            && !swapchain_support.present_modes.is_empty()
     }
 
     fn find_queue_families(
@@ -178,10 +176,10 @@ impl VkPhysicalDevice {
             }
         }
 
-        return QueueFamiliesIndices {
+        QueueFamiliesIndices {
             graphics_family,
             present_family,
-        };
+        }
     }
 
     pub fn find_memory_type(

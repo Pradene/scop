@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::Arc;
 
 use ash::vk;
@@ -6,17 +5,13 @@ use ash::vk;
 use super::query_swapchain_support;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
+    FrameData, GpuMesh, GpuPrimitive, MeshHandle, MeshPushConstants, ResourcesManager,
     VkCommandPool, VkContext, VkDescriptorPool, VkDescriptorSetLayout, VkPipeline, VkQueue,
     VkRenderPass, VkSwapchain,
 };
 use crate::camera::Camera;
 use crate::math::Mat4;
 use crate::math::Vec3;
-use crate::renderer::FrameData;
-use crate::renderer::MeshHandle;
-use crate::renderer::MeshPushConstants;
-use crate::renderer::ResourcesManager;
-use crate::renderer::{GpuMesh, GpuPrimitive};
 
 use sdl3::video::Window;
 
@@ -124,7 +119,12 @@ impl Renderer {
         }
     }
 
-    pub fn draw(&mut self, window: &Window, camera: &Camera, resources: &ResourcesManager) -> Result<(), String> {
+    pub fn draw(
+        &mut self,
+        window: &Window,
+        camera: &Camera,
+        resources: &ResourcesManager,
+    ) -> Result<(), String> {
         self.wait_for_frame()?;
 
         let image_index = match self.acquire_image()? {
@@ -328,7 +328,12 @@ impl Renderer {
         }
     }
 
-    fn draw_meshes(&self, cmd: &vk::CommandBuffer, frame: &FrameData, resources: &ResourcesManager) {
+    fn draw_meshes(
+        &self,
+        cmd: &vk::CommandBuffer,
+        frame: &FrameData,
+        resources: &ResourcesManager,
+    ) {
         for mesh in &resources.meshes {
             self.bind_mesh(cmd, mesh);
             for primitive in &mesh.primitives {
@@ -354,12 +359,24 @@ impl Renderer {
                     std::mem::size_of::<MeshPushConstants>(),
                 ),
             );
-            device.handle.cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.handle], &[0]);
-            device.handle.cmd_bind_index_buffer(*cmd, mesh.index_buffer.handle, 0, vk::IndexType::UINT32);
+            device
+                .handle
+                .cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.handle], &[0]);
+            device.handle.cmd_bind_index_buffer(
+                *cmd,
+                mesh.index_buffer.handle,
+                0,
+                vk::IndexType::UINT32,
+            );
         }
     }
 
-    fn draw_submesh(&self, cmd: &vk::CommandBuffer, submesh: &GpuPrimitive, resources: &ResourcesManager) {
+    fn draw_submesh(
+        &self,
+        cmd: &vk::CommandBuffer,
+        submesh: &GpuPrimitive,
+        resources: &ResourcesManager,
+    ) {
         let mat = resources.get_material(submesh.material);
         let fpc = MaterialPushConstants {
             ambient: mat.ka.unwrap_or(Vec3::new(0.1, 0.1, 0.1)),

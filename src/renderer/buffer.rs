@@ -46,14 +46,20 @@ impl<T: Copy> VkBuffer<T> {
         let target_properties = vk::MemoryPropertyFlags::DEVICE_LOCAL;
         let (handle, memory) = create_buffer(context, &size, &usage, &target_properties)?;
 
-        copy_buffer(
-            &device,
-            command_pool,
-            &queue,
-            &staging_buffer,
-            &handle,
-            &size,
-        )?;
+        let cmd = command_pool.begin_single_cmd()?;
+        unsafe {
+            device.handle.cmd_copy_buffer(
+                cmd,
+                staging_buffer,
+                handle,
+                &[vk::BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size,
+                }],
+            );
+        }
+        command_pool.end_single_cmd(queue, cmd)?;
 
         unsafe {
             device.handle.destroy_buffer(staging_buffer, None);
@@ -171,88 +177,4 @@ pub fn create_buffer(
     };
 
     Ok((buffer, buffer_memory))
-}
-
-fn copy_buffer(
-    device: &VkDevice,
-    command_pool: &VkCommandPool,
-    queue: &VkQueue,
-    src: &vk::Buffer,
-    dst: &vk::Buffer,
-    size: &vk::DeviceSize,
-) -> Result<(), String> {
-    let allocate_info = vk::CommandBufferAllocateInfo {
-        s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
-        level: vk::CommandBufferLevel::PRIMARY,
-        command_pool: command_pool.handle,
-        command_buffer_count: 1,
-        ..Default::default()
-    };
-
-    let mut buffers = unsafe {
-        device
-            .handle
-            .allocate_command_buffers(&allocate_info)
-            .map_err(|e| format!("Failed to allocate staging command buffer: {}", e))?
-    };
-
-    if buffers.is_empty() {
-        return Err("Allocation call succeeded but returned no command buffers".to_string());
-    }
-    let command_buffer = buffers.remove(0);
-
-    let begin_info = vk::CommandBufferBeginInfo {
-        s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
-        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-        ..Default::default()
-    };
-
-    unsafe {
-        device
-            .handle
-            .begin_command_buffer(command_buffer, &begin_info)
-            .map_err(|e| format!("Failed to begin recording command buffer: {}", e))?
-    };
-
-    let copy_region = vk::BufferCopy {
-        src_offset: 0,
-        dst_offset: 0,
-        size: *size,
-    };
-
-    unsafe {
-        device
-            .handle
-            .cmd_copy_buffer(command_buffer, *src, *dst, &[copy_region]);
-
-        device
-            .handle
-            .end_command_buffer(command_buffer)
-            .map_err(|e| format!("Failed to end command buffer recording: {}", e))?;
-    };
-
-    let submit_info = vk::SubmitInfo {
-        s_type: vk::StructureType::SUBMIT_INFO,
-        command_buffer_count: 1,
-        p_command_buffers: &command_buffer,
-        ..Default::default()
-    };
-
-    unsafe {
-        device
-            .handle
-            .queue_submit(queue.handle, &[submit_info], vk::Fence::null())
-            .map_err(|e| format!("Failed to submit copy queue commands: {}", e))?;
-
-        device
-            .handle
-            .queue_wait_idle(queue.handle)
-            .map_err(|e| format!("Failed waiting for queue idle on copy: {}", e))?;
-
-        device
-            .handle
-            .free_command_buffers(command_pool.handle, &[command_buffer]);
-    };
-
-    Ok(())
 }
