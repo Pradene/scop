@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::{VkCommandPool, VkContext, VkDevice, VkQueue, VkTexture};
-use crate::math::Mat4;
 use crate::parser::{Material, Mesh};
 use crate::renderer::{GpuMaterial, GpuMesh, GpuPrimitive, Vertex, VkBuffer};
 use ash::vk;
@@ -86,9 +85,7 @@ impl ResourcesManager {
     /// uploading any textures that haven't been loaded yet.
     fn resolve_material(&mut self, context: &VkContext, raw: &Material) -> GpuMaterial {
         let map_kd = raw.map_kd.as_deref().map(|p| self.load_texture(context, p));
-
         let map_ks = raw.map_ks.as_deref().map(|p| self.load_texture(context, p));
-
         let map_ka = raw.map_ka.as_deref().map(|p| self.load_texture(context, p));
 
         GpuMaterial {
@@ -105,7 +102,7 @@ impl ResourcesManager {
         }
     }
 
-    pub fn upload_object(
+    pub fn load_mesh(
         &mut self,
         context: &VkContext,
         mesh: &Mesh,
@@ -172,7 +169,6 @@ impl ResourcesManager {
             vertex_buffer,
             index_buffer,
             primitives,
-            transform: Mat4::identity(),
         });
 
         Ok(handle)

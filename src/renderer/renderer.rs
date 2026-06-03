@@ -5,29 +5,15 @@ use ash::vk;
 use super::query_swapchain_support;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
-    FrameData, GpuMesh, GpuPrimitive, MeshHandle, MeshPushConstants, ResourcesManager,
+    FrameData, GpuMesh, GpuPrimitive, MeshPushConstants, ResourcesManager,
     VkCommandPool, VkContext, VkDescriptorPool, VkDescriptorSetLayout, VkPipeline, VkQueue,
-    VkRenderPass, VkSwapchain,
+    VkRenderPass, VkSwapchain, MaterialPushConstants
 };
 use crate::camera::Camera;
 use crate::math::Mat4;
 use crate::math::Vec3;
 
 use sdl3::video::Window;
-
-#[repr(C)]
-pub struct MaterialPushConstants {
-    pub ambient: Vec3,
-    pub dissolve: f32,
-    pub diffuse: Vec3,
-    pub shininess: f32,
-    pub specular: Vec3,
-    pub optical_density: f32,
-    pub illum: i32,
-    pub tex_diffuse: u32,
-    pub tex_ambient: u32,
-    pub tex_specular: u32,
-}
 
 pub struct Uniforms {
     pub view: Mat4,
@@ -344,7 +330,7 @@ impl Renderer {
 
     fn bind_mesh(&self, cmd: &vk::CommandBuffer, mesh: &GpuMesh) {
         let vpc = MeshPushConstants {
-            transform: mesh.transform,
+            transform: Mat4::identity(),
         };
 
         let device = &self.context.device;

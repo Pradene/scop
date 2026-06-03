@@ -34,6 +34,20 @@ impl Default for GpuMaterial {
     }
 }
 
+#[repr(C)]
+pub struct MaterialPushConstants {
+    pub ambient: Vec3,
+    pub dissolve: f32,
+    pub diffuse: Vec3,
+    pub shininess: f32,
+    pub specular: Vec3,
+    pub optical_density: f32,
+    pub illum: i32,
+    pub tex_diffuse: u32,
+    pub tex_ambient: u32,
+    pub tex_specular: u32,
+}
+
 pub struct GpuPrimitive {
     pub index_offset: u32,
     pub index_count: u32,
@@ -45,15 +59,9 @@ pub struct GpuMesh {
     pub vertex_buffer: VkBuffer<Vertex>,
     pub index_buffer: VkBuffer<u32>,
     pub primitives: Vec<GpuPrimitive>,
-    pub transform: Mat4,
 }
 
-impl GpuMesh {
-    pub fn update_transform(&mut self, transform: Mat4) {
-        self.transform = transform;
-    }
-}
-
+#[repr(C)]
 pub struct MeshPushConstants {
     pub transform: Mat4,
 }

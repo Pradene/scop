@@ -34,8 +34,10 @@ impl Engine {
         self.renderer.draw(window, camera, &self.manager)
     }
 
-    pub fn add_object(&mut self, mesh: Mesh) {
-        self.manager.upload_object(&*self.context, &mesh);
+    pub fn add_object(&mut self, mesh: Mesh) -> Result<(), String> {
+        self.manager.load_mesh(&*self.context, &mesh)?;
+
+        Ok(())
     }
 
     pub fn wait_idle(&self) {

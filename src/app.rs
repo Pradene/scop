@@ -1,7 +1,7 @@
 use crate::camera::Camera;
 use crate::math::Vec3;
 use crate::parser::Mesh;
-use crate::renderer::{Engine, MeshHandle};
+use crate::renderer::Engine;
 
 use sdl3::{
     event::{Event, WindowEvent},
@@ -208,10 +208,8 @@ impl App {
         }
     }
 
-    pub fn add_object(&mut self, mesh: Mesh) -> Result<MeshHandle, String> {
-        self.engine.add_object(mesh);
-
-        Ok(0)
+    pub fn add_object(&mut self, mesh: Mesh) -> Result<(), String> {
+        self.engine.add_object(mesh)
     }
 }
 

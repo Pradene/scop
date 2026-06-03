@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::time::Instant;
+// use std::time::Instant;
 
 use scop::app::App;
 use scop::parser::ObjFileParser;
@@ -12,7 +12,7 @@ fn main() -> Result<(), String> {
 
     app.add_object(mesh)?;
 
-    let start = Instant::now();
+    // let start = Instant::now();
 
     loop {
         if !app.handle_events()? {
