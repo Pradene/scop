@@ -5,7 +5,7 @@ use std::sync::Arc;
 use super::{VkDevice, VkInstance, VkPhysicalDevice, VkSurface};
 
 pub struct VkContext {
-    device: Arc<VkDevice>,
+    pub device: Arc<VkDevice>,
     pub physical_device: VkPhysicalDevice,
     pub surface: VkSurface,
     pub instance: VkInstance,

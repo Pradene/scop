@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
-use super::{VkCommandPool, VkContext, VkQueue, VkTexture};
+use super::{VkCommandPool, VkContext, VkDevice, VkQueue, VkTexture};
 use crate::math::Mat4;
 use crate::parser::{GpuMaterial, Material, Mesh, ObjFileParser};
 use crate::renderer::{GpuMesh, GpuPrimitive, Vertex, VkBuffer};
@@ -11,7 +12,7 @@ pub type TextureHandle = usize;
 pub type MaterialHandle = usize;
 pub type MeshHandle = usize;
 
-pub struct ResourceManager {
+pub struct ResourcesManager {
     pub textures: Vec<VkTexture>,
     pub texture_cache: HashMap<String, TextureHandle>,
 
@@ -20,15 +21,24 @@ pub struct ResourceManager {
 
     pub meshes: Vec<GpuMesh>,
     pub mesh_cache: HashMap<String, MeshHandle>,
+
+    upload_queue: VkQueue,
+    upload_pool: VkCommandPool,
+    device: Arc<VkDevice>,
 }
 
-impl ResourceManager {
+impl ResourcesManager {
     pub fn new(
-        context: &VkContext,
-        graphics_queue: &VkQueue,
-        command_pool: &VkCommandPool,
+        context: Arc<VkContext>,
     ) -> Result<Self, String> {
-        let white = VkTexture::white(&context, graphics_queue, command_pool)?;
+        let upload_queue = VkQueue::new(context.device(), context.graphics_family());
+        let upload_pool = VkCommandPool::new(
+            context.device(),
+            context.graphics_family(),
+            vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+        )?;
+
+        let white = VkTexture::white(&context, &upload_queue, &upload_pool)?;
         let default_material = GpuMaterial::default();
 
         Ok(Self {
@@ -38,6 +48,10 @@ impl ResourceManager {
             material_cache: HashMap::new(),
             meshes: Vec::new(),
             mesh_cache: HashMap::new(),
+
+            upload_pool,
+            upload_queue,
+            device: context.device(),
         })
     }
 
@@ -49,18 +63,12 @@ impl ResourceManager {
         0
     }
 
-    pub fn load_texture(
-        &mut self,
-        context: &VkContext,
-        queue: &VkQueue,
-        command_pool: &VkCommandPool,
-        path: &str,
-    ) -> TextureHandle {
+    pub fn load_texture(&mut self, context: &VkContext, path: &str) -> TextureHandle {
         if let Some(&handle) = self.texture_cache.get(path) {
             return handle;
         }
 
-        match VkTexture::from_path(context, queue, command_pool, path) {
+        match VkTexture::from_path(context, &self.upload_queue, &self.upload_pool, path) {
             Ok(tex) => {
                 let handle = self.textures.len();
                 self.textures.push(tex);
@@ -79,27 +87,12 @@ impl ResourceManager {
 
     /// Converts a Material (string paths) into a GpuMaterial (TextureHandles),
     /// uploading any textures that haven't been loaded yet.
-    fn resolve_material(
-        &mut self,
-        context: &VkContext,
-        queue: &VkQueue,
-        command_pool: &VkCommandPool,
-        raw: &Material,
-    ) -> GpuMaterial {
-        let map_kd = raw
-            .map_kd
-            .as_deref()
-            .map(|p| self.load_texture(context, queue, command_pool, p));
+    fn resolve_material(&mut self, context: &VkContext, raw: &Material) -> GpuMaterial {
+        let map_kd = raw.map_kd.as_deref().map(|p| self.load_texture(context, p));
 
-        let map_ks = raw
-            .map_ks
-            .as_deref()
-            .map(|p| self.load_texture(context, queue, command_pool, p));
+        let map_ks = raw.map_ks.as_deref().map(|p| self.load_texture(context, p));
 
-        let map_ka = raw
-            .map_ka
-            .as_deref()
-            .map(|p| self.load_texture(context, queue, command_pool, p));
+        let map_ka = raw.map_ka.as_deref().map(|p| self.load_texture(context, p));
 
         GpuMaterial {
             ka: raw.ka,
@@ -115,33 +108,9 @@ impl ResourceManager {
         }
     }
 
-    pub fn load_object<P: AsRef<Path>>(
-        &mut self,
-        context: &VkContext,
-        queue: &VkQueue,
-        command_pool: &VkCommandPool,
-        path: P,
-    ) -> Result<(MeshHandle, std::ops::Range<TextureHandle>), String> {
-        let path_str = path.as_ref().to_string_lossy().to_string();
-
-        if let Some(&handle) = self.mesh_cache.get(&path_str) {
-            return Ok((handle, 0..0));
-        }
-
-        let textures_before = self.textures.len();
-        let object = ObjFileParser::parse(&path)?;
-        let handle = self.upload_object(context, queue, command_pool, &object)?;
-        let textures_after = self.textures.len();
-
-        self.mesh_cache.insert(path_str, handle);
-        Ok((handle, textures_before..textures_after))
-    }
-
     pub fn upload_object(
         &mut self,
         context: &VkContext,
-        queue: &VkQueue,
-        command_pool: &VkCommandPool,
         mesh: &Mesh,
     ) -> Result<MeshHandle, String> {
         let mut all_vertices: Vec<Vertex> = Vec::new();
@@ -150,7 +119,7 @@ impl ResourceManager {
 
         for (name, raw) in &mesh.materials {
             if !self.material_cache.contains_key(name) {
-                let mat = self.resolve_material(context, queue, command_pool, raw);
+                let mat = self.resolve_material(context, raw);
                 let handle = self.materials.len();
                 self.materials.push(mat);
                 self.material_cache.insert(name.clone(), handle);
@@ -187,16 +156,16 @@ impl ResourceManager {
 
         let vertex_buffer = VkBuffer::device_local(
             context,
-            queue,
-            command_pool,
+            &self.upload_queue,
+            &self.upload_pool,
             &all_vertices,
             vk::BufferUsageFlags::VERTEX_BUFFER,
         )?;
 
         let index_buffer = VkBuffer::device_local(
             context,
-            queue,
-            command_pool,
+            &self.upload_queue,
+            &self.upload_pool,
             &all_indices,
             vk::BufferUsageFlags::INDEX_BUFFER,
         )?;

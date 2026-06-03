@@ -84,7 +84,7 @@ impl VkDescriptorPool {
         Ok(set)
     }
 
-    pub fn register_texture_to_descriptor(
+    pub fn update_texture(
         &self,
         set: vk::DescriptorSet,
         handle: TextureHandle,

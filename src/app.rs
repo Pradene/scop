@@ -1,19 +1,23 @@
 use std::path::Path;
 
-use crate::math::Vec3;
 use crate::camera::Camera;
-use crate::renderer::{GpuMesh, MeshHandle, Renderer};
-use sdl3::event::{Event, WindowEvent};
-use sdl3::keyboard::Keycode;
-use sdl3::mouse::MouseButton;
-use sdl3::video::Window;
-use sdl3::Sdl;
+use crate::math::Vec3;
+use crate::parser::Mesh;
+use crate::renderer::{Engine, GpuMesh, MeshHandle, Renderer};
+
+use sdl3::{
+    event::{Event, WindowEvent},
+    keyboard::Keycode,
+    mouse::MouseButton,
+    video::Window,
+    Sdl,
+};
 
 pub struct App {
-    pub sdl_context: Sdl,
-    pub renderer: Renderer,
-    pub window: Window,
-    pub camera: Camera,
+    sdl_context: Sdl,
+    engine: Engine,
+    window: Window,
+    camera: Camera,
     event_pump: sdl3::EventPump,
 
     // Mouse state
@@ -35,7 +39,7 @@ impl App {
     pub fn new() -> Result<App, String> {
         let width: u32 = 800;
         let height: u32 = 600;
-        
+
         let sdl_context = sdl3::init().map_err(|e| format!("Failed to init SDL3: {}", e))?;
 
         let video_subsystem = sdl_context
@@ -50,8 +54,7 @@ impl App {
             .build()
             .map_err(|e| format!("Failed to create window: {}", e))?;
 
-        let renderer =
-            Renderer::new(&window).map_err(|e| format!("Failed to create renderer: {}", e))?;
+        let engine = Engine::new(&window)?;
 
         let event_pump = sdl_context
             .event_pump()
@@ -69,7 +72,7 @@ impl App {
         Ok(App {
             sdl_context,
             window,
-            renderer,
+            engine,
             camera,
             event_pump,
             mouse_pressed: false,
@@ -103,7 +106,7 @@ impl App {
                 } => {
                     if w > 0 && h > 0 {
                         self.camera.resize(w as u32, h as u32);
-                        if let Err(e) = self.renderer.resize(w as u32, h as u32) {
+                        if let Err(e) = self.engine.resize(w as u32, h as u32) {
                             eprintln!("Failed to resize swapchain: {:?}", e);
                         }
                     }
@@ -190,7 +193,7 @@ impl App {
     }
 
     pub fn draw(&mut self) {
-        if let Err(e) = self.renderer.draw(&self.window, &self.camera) {
+        if let Err(e) = self.engine.draw(&self.window, &self.camera) {
             eprintln!("Failed to draw: {:?}", e);
         }
     }
@@ -207,17 +210,15 @@ impl App {
         }
     }
 
-    pub fn load_object(&mut self, path: &Path) -> Result<MeshHandle, String> {
-        self.renderer.load_object(path)
-    }
+    pub fn add_object(&mut self, mesh: Mesh) -> Result<MeshHandle, String> {
+        self.engine.add_object(mesh);
 
-    pub fn get_object(&mut self, handle: MeshHandle) -> &mut GpuMesh {
-        self.renderer.get_mesh(handle)
+        Ok(0)
     }
 }
 
 impl Drop for App {
     fn drop(&mut self) {
-        self.renderer.wait_idle();
+        self.engine.wait_idle();
     }
 }

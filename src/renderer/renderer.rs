@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use ash::vk;
 
@@ -14,10 +15,9 @@ use crate::math::Vec3;
 use crate::renderer::FrameData;
 use crate::renderer::MeshHandle;
 use crate::renderer::MeshPushConstants;
-use crate::renderer::ResourceManager;
+use crate::renderer::ResourcesManager;
 use crate::renderer::{GpuMesh, GpuPrimitive};
 
-// use winit::window::Window;
 use sdl3::video::Window;
 
 #[repr(C)]
@@ -43,7 +43,6 @@ pub struct Renderer {
     frames: Vec<FrameData>,
     frame: usize,
 
-    resources: ResourceManager,
     command_pool: VkCommandPool,
     swapchain: VkSwapchain,
     pipeline: VkPipeline,
@@ -52,14 +51,11 @@ pub struct Renderer {
     descriptor_set_layout: VkDescriptorSetLayout,
     present_queue: VkQueue,
     graphics_queue: VkQueue,
-    context: VkContext,
+    context: Arc<VkContext>,
 }
 
 impl Renderer {
-    pub fn new(window: &Window) -> Result<Renderer, String> {
-        let context = VkContext::new(window)
-            .map_err(|e| format!("Failed to create Vulkan context: {:?}", e))?;
-
+    pub fn new(window: &Window, context: Arc<VkContext>) -> Result<Renderer, String> {
         let graphics_queue = VkQueue::new(context.device(), context.graphics_family());
         let present_queue = VkQueue::new(context.device(), context.present_family());
 
@@ -106,18 +102,6 @@ impl Renderer {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let resources = ResourceManager::new(&context, &graphics_queue, &command_pool)
-            .map_err(|e| format!("Failed to create resources manager: {}", e))?;
-
-        let white = resources.get_texture(ResourceManager::white_texture());
-        for frame in &frames {
-            descriptor_pool.register_texture_to_descriptor(
-                frame.descriptor_set,
-                ResourceManager::white_texture(),
-                white,
-            );
-        }
-
         Ok(Renderer {
             context,
             graphics_queue,
@@ -126,7 +110,6 @@ impl Renderer {
             render_pass,
             pipeline,
             command_pool,
-            resources,
             descriptor_pool,
             descriptor_set_layout,
             frames,
@@ -134,30 +117,14 @@ impl Renderer {
         })
     }
 
-    pub fn load_object(&mut self, path: &Path) -> Result<MeshHandle, String> {
-        let (handle, new_textures) = self.resources.load_object(
-            &self.context,
-            &self.graphics_queue,
-            &self.command_pool,
-            path,
-        )?;
-
-        // Register only the newly added textures to every frame's descriptor set
-        for handle in new_textures {
-            let texture = self.resources.get_texture(handle);
-            for frame in &self.frames {
-                self.descriptor_pool.register_texture_to_descriptor(
-                    frame.descriptor_set,
-                    handle,
-                    texture,
-                );
-            }
+    fn sync_textures(&self, resources: &ResourcesManager) {
+        let set = self.frames[self.frame].descriptor_set;
+        for (handle, texture) in resources.textures.iter().enumerate() {
+            self.descriptor_pool.update_texture(set, handle, texture);
         }
-
-        Ok(handle)
     }
 
-    pub fn draw(&mut self, window: &Window, camera: &Camera) -> Result<(), String> {
+    pub fn draw(&mut self, window: &Window, camera: &Camera, resources: &ResourcesManager) -> Result<(), String> {
         self.wait_for_frame()?;
 
         let image_index = match self.acquire_image()? {
@@ -169,9 +136,11 @@ impl Renderer {
             }
         };
 
+        self.sync_textures(resources);
+
         self.frames[self.frame].update_uniforms(camera);
         self.reset_frame()?;
-        self.record(image_index)?;
+        self.record(image_index, resources)?;
         self.submit()?;
 
         if self.present(image_index)? {
@@ -212,7 +181,8 @@ impl Renderer {
 
     fn reset_frame(&self) -> Result<(), String> {
         let frame = &self.frames[self.frame];
-        let device = self.context.device();
+        let device = &self.context.device;
+
         unsafe {
             device
                 .handle
@@ -246,10 +216,10 @@ impl Renderer {
             .queue_present(&self.present_queue.handle, &signal_semaphores, image_index)
     }
 
-    fn record(&self, image_index: u32) -> Result<(), String> {
+    fn record(&self, image_index: u32, resources: &ResourcesManager) -> Result<(), String> {
         let frame = &self.frames[self.frame];
         let cmd = frame.command_buffer;
-        let device = self.context.device();
+        let device = &self.context.device;
 
         unsafe {
             device
@@ -271,11 +241,11 @@ impl Renderer {
             device
                 .handle
                 .cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
-            self.draw_meshes(&device.handle, &cmd, frame);
+            self.draw_meshes(&cmd, frame, resources);
             device
                 .handle
                 .cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
-            self.draw_meshes(&device.handle, &cmd, frame);
+            self.draw_meshes(&cmd, frame, resources);
             device.handle.cmd_end_render_pass(cmd);
 
             device
@@ -338,7 +308,7 @@ impl Renderer {
             extent: self.swapchain.extent,
         };
 
-        let device = self.context.device();
+        let device = &self.context.device;
         unsafe {
             device.handle.cmd_bind_pipeline(
                 cmd,
@@ -358,33 +328,23 @@ impl Renderer {
         }
     }
 
-    fn draw_meshes(&self, device: &ash::Device, cmd: &vk::CommandBuffer, frame: &FrameData) {
-        unsafe {
-            device.cmd_bind_descriptor_sets(
-                *cmd,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline.layout,
-                0,
-                &[frame.descriptor_set],
-                &[],
-            );
-        }
-
-        for mesh in &self.resources.meshes {
-            self.bind_mesh(device, cmd, mesh);
-            for submesh in &mesh.primitives {
-                self.draw_submesh(device, cmd, submesh);
+    fn draw_meshes(&self, cmd: &vk::CommandBuffer, frame: &FrameData, resources: &ResourcesManager) {
+        for mesh in &resources.meshes {
+            self.bind_mesh(cmd, mesh);
+            for primitive in &mesh.primitives {
+                self.draw_submesh(cmd, primitive, resources);
             }
         }
     }
 
-    fn bind_mesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, mesh: &GpuMesh) {
+    fn bind_mesh(&self, cmd: &vk::CommandBuffer, mesh: &GpuMesh) {
         let vpc = MeshPushConstants {
             transform: mesh.transform,
         };
 
+        let device = &self.context.device;
         unsafe {
-            device.cmd_push_constants(
+            device.handle.cmd_push_constants(
                 *cmd,
                 self.pipeline.layout,
                 vk::ShaderStageFlags::VERTEX,
@@ -394,13 +354,13 @@ impl Renderer {
                     std::mem::size_of::<MeshPushConstants>(),
                 ),
             );
-            device.cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.handle], &[0]);
-            device.cmd_bind_index_buffer(*cmd, mesh.index_buffer.handle, 0, vk::IndexType::UINT32);
+            device.handle.cmd_bind_vertex_buffers(*cmd, 0, &[mesh.vertex_buffer.handle], &[0]);
+            device.handle.cmd_bind_index_buffer(*cmd, mesh.index_buffer.handle, 0, vk::IndexType::UINT32);
         }
     }
 
-    fn draw_submesh(&self, device: &ash::Device, cmd: &vk::CommandBuffer, submesh: &GpuPrimitive) {
-        let mat = self.resources.get_material(submesh.material);
+    fn draw_submesh(&self, cmd: &vk::CommandBuffer, submesh: &GpuPrimitive, resources: &ResourcesManager) {
+        let mat = resources.get_material(submesh.material);
         let fpc = MaterialPushConstants {
             ambient: mat.ka.unwrap_or(Vec3::new(0.1, 0.1, 0.1)),
             dissolve: mat.dissolve.unwrap_or(1.0),
@@ -409,13 +369,14 @@ impl Renderer {
             specular: mat.ks.unwrap_or(Vec3::new(1.0, 1.0, 1.0)),
             optical_density: mat.ni.unwrap_or(1.0),
             illum: mat.illum.unwrap_or(2),
-            tex_diffuse: mat.map_kd.unwrap_or(ResourceManager::white_texture()) as u32,
-            tex_specular: mat.map_ks.unwrap_or(ResourceManager::white_texture()) as u32,
-            tex_ambient: mat.map_ka.unwrap_or(ResourceManager::white_texture()) as u32,
+            tex_diffuse: mat.map_kd.unwrap_or(ResourcesManager::white_texture()) as u32,
+            tex_specular: mat.map_ks.unwrap_or(ResourcesManager::white_texture()) as u32,
+            tex_ambient: mat.map_ka.unwrap_or(ResourcesManager::white_texture()) as u32,
         };
 
+        let device = &self.context.device;
         unsafe {
-            device.cmd_push_constants(
+            device.handle.cmd_push_constants(
                 *cmd,
                 self.pipeline.layout,
                 vk::ShaderStageFlags::FRAGMENT,
@@ -425,7 +386,7 @@ impl Renderer {
                     std::mem::size_of::<MaterialPushConstants>(),
                 ),
             );
-            device.cmd_draw_indexed(
+            device.handle.cmd_draw_indexed(
                 *cmd,
                 submesh.index_count,
                 1,
@@ -495,11 +456,7 @@ impl Renderer {
     }
 
     pub fn wait_idle(&self) {
-        self.context.device().wait_idle();
-    }
-
-    pub fn get_mesh(&mut self, handle: MeshHandle) -> &mut GpuMesh {
-        self.resources.get_mesh(handle)
+        self.context.device.wait_idle();
     }
 }
 
