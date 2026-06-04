@@ -144,7 +144,7 @@ impl VkPipeline {
             },
             vk::PushConstantRange {
                 stage_flags: vk::ShaderStageFlags::FRAGMENT,
-                offset: 64,
+                offset: std::mem::size_of::<MeshPushConstants>() as u32,
                 size: std::mem::size_of::<MaterialPushConstants>() as u32,
             },
         ];
