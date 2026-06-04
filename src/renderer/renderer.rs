@@ -323,8 +323,9 @@ impl Renderer {
         resources: &ResourcesManager,
     ) {
         for object in &scene.objects {
-            let mesh = resources.get_mesh(object.mesh);
-            self.bind_mesh(cmd, mesh, object.transform);
+            let transform = object.transform();
+            let mesh = resources.get_mesh(object.id());
+            self.bind_mesh(cmd, mesh, transform);
             for primitive in &mesh.primitives {
                 self.draw_submesh(cmd, primitive, resources);
             }

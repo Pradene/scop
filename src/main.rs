@@ -23,7 +23,7 @@ fn main() -> Result<(), String> {
         let angle = speed * elapsed;
         let transform = Mat4::identity().rotate(angle, Vec3::Y);
 
-        app.get_object(object_id).update_transform(transform);
+        app.get_object(object_id).set_rotation(0., angle, 0.);
 
         app.update();
         app.draw();
