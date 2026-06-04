@@ -1,9 +1,10 @@
-use sdl3::video::Window;
 use std::sync::Arc;
 
-use super::{Renderer, ResourcesManager, VkContext};
+use super::{MeshHandle, Renderer, ResourcesManager, VkContext};
 use crate::camera::Camera;
-use crate::parser::Mesh;
+use crate::scene::Scene;
+
+use sdl3::video::Window;
 
 pub struct Engine {
     context: Arc<VkContext>,
@@ -30,14 +31,12 @@ impl Engine {
         self.renderer.resize(width, height)
     }
 
-    pub fn draw(&mut self, window: &Window, camera: &Camera) -> Result<(), String> {
-        self.renderer.draw(window, camera, &self.manager)
+    pub fn load_mesh(&mut self, path: &str) -> Result<MeshHandle, String> {
+        self.manager.load_mesh(&*self.context, path)
     }
 
-    pub fn add_object(&mut self, mesh: Mesh) -> Result<(), String> {
-        self.manager.load_mesh(&*self.context, &mesh)?;
-
-        Ok(())
+    pub fn draw(&mut self, window: &Window, camera: &Camera, scene: &Scene) -> Result<(), String> {
+        self.renderer.draw(window, camera, scene, &self.manager)
     }
 
     pub fn wait_idle(&self) {

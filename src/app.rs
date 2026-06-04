@@ -1,7 +1,7 @@
 use crate::camera::Camera;
 use crate::math::Vec3;
-use crate::parser::Mesh;
-use crate::renderer::Engine;
+use crate::renderer::{Engine, MeshHandle};
+use crate::scene::{Object, ObjectHandle, Scene};
 
 use sdl3::{
     event::{Event, WindowEvent},
@@ -16,6 +16,7 @@ pub struct App {
     engine: Engine,
     window: Window,
     camera: Camera,
+    scene: Scene,
     event_pump: sdl3::EventPump,
 
     // Mouse state
@@ -58,6 +59,8 @@ impl App {
             .event_pump()
             .map_err(|e| format!("Failed to get event pump: {}", e))?;
 
+        let scene = Scene::new();
+
         let camera = Camera::new(
             Vec3::new(0., 0., -200.),
             Vec3::ZERO,
@@ -72,6 +75,7 @@ impl App {
             window,
             engine,
             camera,
+            scene,
             event_pump,
             mouse_pressed: false,
             last_mouse: None,
@@ -191,7 +195,7 @@ impl App {
     }
 
     pub fn draw(&mut self) {
-        if let Err(e) = self.engine.draw(&self.window, &self.camera) {
+        if let Err(e) = self.engine.draw(&self.window, &self.camera, &self.scene) {
             eprintln!("Failed to draw: {:?}", e);
         }
     }
@@ -208,8 +212,16 @@ impl App {
         }
     }
 
-    pub fn add_object(&mut self, mesh: Mesh) -> Result<(), String> {
-        self.engine.add_object(mesh)
+    pub fn add_object(&mut self, object: Object) -> ObjectHandle {
+        self.scene.add_object(object)
+    }
+
+    pub fn get_object(&mut self, object_id: ObjectHandle) -> &mut Object {
+        self.scene.get_object(object_id)
+    }
+
+    pub fn load_mesh(&mut self, path: &str) -> Result<MeshHandle, String> {
+        self.engine.load_mesh(path)
     }
 }
 

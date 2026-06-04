@@ -11,7 +11,7 @@ use super::{
 };
 use crate::camera::Camera;
 use crate::math::Mat4;
-use crate::math::Vec3;
+use crate::scene::Scene;
 
 use sdl3::video::Window;
 
@@ -109,6 +109,7 @@ impl Renderer {
         &mut self,
         window: &Window,
         camera: &Camera,
+        scene: &Scene,
         resources: &ResourcesManager,
     ) -> Result<(), String> {
         self.wait_for_frame()?;
@@ -126,7 +127,7 @@ impl Renderer {
 
         self.frames[self.frame].update_uniforms(camera);
         self.reset_frame()?;
-        self.record(image_index, resources)?;
+        self.record(image_index, scene, resources)?;
         self.submit()?;
 
         if self.present(image_index)? {
@@ -202,7 +203,7 @@ impl Renderer {
             .queue_present(&self.present_queue.handle, &signal_semaphores, image_index)
     }
 
-    fn record(&self, image_index: u32, resources: &ResourcesManager) -> Result<(), String> {
+    fn record(&self, image_index: u32, scene: &Scene, resources: &ResourcesManager) -> Result<(), String> {
         let frame = &self.frames[self.frame];
         let cmd = frame.command_buffer;
         let device = &self.context.device;
@@ -227,11 +228,11 @@ impl Renderer {
             device
                 .handle
                 .cmd_set_cull_mode(cmd, vk::CullModeFlags::FRONT);
-            self.draw_meshes(&cmd, frame, resources);
+            self.draw_meshes(&cmd, frame, scene, resources);
             device
                 .handle
                 .cmd_set_cull_mode(cmd, vk::CullModeFlags::BACK);
-            self.draw_meshes(&cmd, frame, resources);
+            self.draw_meshes(&cmd, frame, scene, resources);
             device.handle.cmd_end_render_pass(cmd);
 
             device
@@ -318,19 +319,21 @@ impl Renderer {
         &self,
         cmd: &vk::CommandBuffer,
         frame: &FrameData,
+        scene: &Scene,
         resources: &ResourcesManager,
     ) {
-        for mesh in &resources.meshes {
-            self.bind_mesh(cmd, mesh);
+        for object in &scene.objects {
+            let mesh = resources.get_mesh(object.mesh);
+            self.bind_mesh(cmd, mesh, object.transform);
             for primitive in &mesh.primitives {
                 self.draw_submesh(cmd, primitive, resources);
             }
         }
     }
 
-    fn bind_mesh(&self, cmd: &vk::CommandBuffer, mesh: &GpuMesh) {
+    fn bind_mesh(&self, cmd: &vk::CommandBuffer, mesh: &GpuMesh, transform: Mat4) {
         let vpc = MeshPushConstants {
-            transform: Mat4::identity(),
+            transform,
         };
 
         let device = &self.context.device;

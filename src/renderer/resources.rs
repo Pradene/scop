@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::{VkCommandPool, VkContext, VkDevice, VkQueue, VkTexture};
-use crate::parser::{Material, Mesh};
-use crate::renderer::{GpuMaterial, GpuMesh, GpuPrimitive, Vertex, VkBuffer};
 use ash::vk;
+
+use super::{
+    GpuMaterial, GpuMesh, GpuPrimitive, Vertex, VkBuffer, VkCommandPool, VkContext, VkDevice,
+    VkQueue, VkTexture,
+};
+use crate::parser::{Material, Mesh, ObjFileParser};
 
 pub type TextureHandle = usize;
 pub type MaterialHandle = usize;
@@ -102,7 +105,7 @@ impl ResourcesManager {
         }
     }
 
-    pub fn load_mesh(&mut self, context: &VkContext, mesh: &Mesh) -> Result<MeshHandle, String> {
+    pub fn save_mesh(&mut self, context: &VkContext, mesh: &Mesh) -> Result<MeshHandle, String> {
         let mut all_vertices: Vec<Vertex> = Vec::new();
         let mut all_indices: Vec<u32> = Vec::new();
         let mut primitives: Vec<GpuPrimitive> = Vec::new();
@@ -170,6 +173,20 @@ impl ResourcesManager {
         Ok(handle)
     }
 
+    pub fn load_mesh(&mut self, context: &VkContext, path: &str) -> Result<MeshHandle, String> {
+        if let Some(&handle) = self.mesh_cache.get(path) {
+            return Ok(handle);
+        }
+
+        let mesh = ObjFileParser::parse(path)
+            .map_err(|e| format!("Failed to parse mesh '{}': {}", path, e))?;
+
+        let handle = self.save_mesh(context, &mesh)?;
+        self.mesh_cache.insert(path.to_string(), handle);
+
+        Ok(handle)
+    }
+
     pub fn get_texture(&self, handle: TextureHandle) -> &VkTexture {
         &self.textures[handle]
     }
@@ -178,7 +195,7 @@ impl ResourcesManager {
         &self.materials[handle]
     }
 
-    pub fn get_mesh(&mut self, handle: MeshHandle) -> &mut GpuMesh {
-        &mut self.meshes[handle]
+    pub fn get_mesh(&self, handle: MeshHandle) -> &GpuMesh {
+        &self.meshes[handle]
     }
 }

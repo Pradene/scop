@@ -91,6 +91,7 @@ impl VkSwapchain {
             composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
             present_mode,
             clipped: vk::TRUE,
+            // image_sharing_mode: vk::SharingMode::EXCLUSIVE,
             old_swapchain,
             ..Default::default()
         };
