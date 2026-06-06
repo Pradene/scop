@@ -4,20 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use crate::math::Vec3;
-
-#[derive(Debug, Default, Clone)]
-pub struct Material {
-    pub ka: Vec3,
-    pub kd: Vec3,
-    pub ks: Vec3,
-    pub ns: f32,
-    pub ni: f32,
-    pub dissolve: f32,
-    pub illum: i32,
-    pub map_ka: String,
-    pub map_kd: String,
-    pub map_ks: String,
-}
+use crate::scene::Material;
 
 pub struct MtlFileParser;
 
@@ -54,66 +41,71 @@ impl MtlFileParser {
         }
 
         let tokens: Vec<&str> = trimmed.split_whitespace().collect();
-        let tag = *tokens.get(0).ok_or("Empty line token")?;
-        let rem = tokens.get(1..).unwrap_or(&[]);
 
-        match tag {
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.is_empty() {
+            return Ok(());
+        }
+
+        let remainder = &parts[1..];
+
+        match parts[0] {
             "newmtl" => {
                 if !name.is_empty() {
                     materials.insert(name.clone(), current.clone());
                 }
                 *current = Material::default();
-                *name = rem.join(" ");
+                *name = remainder.join(" ");
             }
             "Ka" => {
                 current.ka =
-                    Self::to_vec3(rem).ok_or_else(|| "Invalid Ambient Color (Ka)".to_string())?;
+                    Self::to_vec3(remainder).ok_or_else(|| "Invalid Ambient Color (Ka)".to_string())?;
             }
             "Kd" => {
                 current.kd =
-                    Self::to_vec3(rem).ok_or_else(|| "Invalid Diffuse Color (Kd)".to_string())?;
+                    Self::to_vec3(remainder).ok_or_else(|| "Invalid Diffuse Color (Kd)".to_string())?;
             }
             "Ks" => {
                 current.ks =
-                    Self::to_vec3(rem).ok_or_else(|| "Invalid Specular Color (Ks)".to_string())?;
+                    Self::to_vec3(remainder).ok_or_else(|| "Invalid Specular Color (Ks)".to_string())?;
             }
 
             "Ns" => {
-                current.ns = rem
+                current.ns = remainder
                     .get(0)
                     .and_then(|s| Self::to_f32(s))
                     .ok_or_else(|| "Invalid Specular Exponent (Ns)".to_string())?;
             }
             "Ni" => {
-                current.ni = rem
+                current.ni = remainder
                     .get(0)
                     .and_then(|s| Self::to_f32(s))
                     .ok_or_else(|| "Invalid Optical Density (Ni)".to_string())?;
             }
             "d" => {
-                current.dissolve = rem
+                current.dissolve = remainder
                     .get(0)
                     .and_then(|s| Self::to_f32(s))
                     .ok_or_else(|| "Invalid Dissolve (d)".to_string())?;
             }
 
             "illum" => {
-                current.illum = rem
+                current.illum = remainder
                     .get(0)
                     .and_then(|s| s.parse::<i32>().ok())
                     .ok_or_else(|| "Invalid Illumination Model".to_string())?;
             }
 
             "map_Ka" => {
-                current.map_ka = rem.join(" ");
+                current.map_ka = remainder.join(" ");
             }
             "map_Kd" => {
-                current.map_kd = rem.join(" ");
+                current.map_kd = remainder.join(" ");
             }
             "map_Ks" => {
-                current.map_ks = rem.join(" ");
+                current.map_ks = remainder.join(" ");
             }
-            _ => {}
+            _ => { println!("{}", parts[0]); }
         }
         Ok(())
     }

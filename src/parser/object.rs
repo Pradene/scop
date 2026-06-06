@@ -5,19 +5,9 @@ use std::path::Path;
 
 use crate::math::{Vec2, Vec3};
 use crate::renderer::Vertex;
+use crate::scene::{Group, Material, Mesh};
 
-use super::{Material, MtlFileParser};
-
-pub struct Primitive {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
-    pub material: Option<usize>,
-}
-
-pub struct Mesh {
-    pub submeshes: Vec<Primitive>,
-    pub materials: Vec<Material>,
-}
+use super::MtlFileParser;
 
 pub struct ObjFileParser;
 
@@ -35,7 +25,7 @@ impl ObjFileParser {
         let mut materials_map: HashMap<String, usize> = HashMap::new();
         let mut materials: Vec<Material> = Vec::new();
 
-        let mut submeshes: Vec<Primitive> = Vec::new();
+        let mut groups: Vec<Group> = Vec::new();
         let mut cur_verts: Vec<Vertex> = Vec::new();
         let mut cur_indices: Vec<u32> = Vec::new();
         let mut cur_index_map: HashMap<(usize, Option<usize>, Option<usize>), u32> = HashMap::new();
@@ -66,7 +56,7 @@ impl ObjFileParser {
                 }
                 "usemtl" => {
                     if !cur_indices.is_empty() {
-                        submeshes.push(Primitive {
+                        groups.push(Group {
                             vertices: std::mem::take(&mut cur_verts),
                             indices: std::mem::take(&mut cur_indices),
                             material: cur_material.clone(),
@@ -126,12 +116,6 @@ impl ObjFileParser {
                     for token in &remainder[2..] {
                         let current = parse_fv(token)?;
 
-                        let normal = compute_normal(
-                            positions[first.0],
-                            positions[prev.0],
-                            positions[current.0],
-                        );
-
                         for (vi, ti, ni) in [first, prev, current] {
                             let idx = *cur_index_map.entry((vi, ti, ni)).or_insert_with(|| {
                                 let i = cur_verts.len() as u32;
@@ -140,7 +124,7 @@ impl ObjFileParser {
                                     normal: ni
                                         .and_then(|n| normals.get(n))
                                         .copied()
-                                        .unwrap_or(normal),
+                                        .unwrap_or(Vec3::ZERO),
                                     uv: ti
                                         .and_then(|t| texcoords.get(t))
                                         .map(|v| Vec2::new(v.x, v.y))
@@ -163,37 +147,60 @@ impl ObjFileParser {
                         }
                     }
                 }
-                _ => {}
+                "o" => {
+                    continue;
+                }
+                _ => {
+                    println!("{}", parts[0]);
+                }
+            }
+        }
+
+        if normals.is_empty() {
+            for triangle in cur_indices.chunks(3) {
+                let (a, b, c) = (
+                    triangle[0] as usize,
+                    triangle[1] as usize,
+                    triangle[2] as usize,
+                );
+                let n = compute_normal(
+                    cur_verts[a].position,
+                    cur_verts[b].position,
+                    cur_verts[c].position,
+                );
+                cur_verts[a].normal = n;
+                cur_verts[b].normal = n;
+                cur_verts[c].normal = n;
+            }
+            for v in &mut cur_verts {
+                v.normal = v.normal.normalize();
             }
         }
 
         if !cur_indices.is_empty() {
-            submeshes.push(Primitive {
+            groups.push(Group {
                 vertices: cur_verts,
                 indices: cur_indices,
                 material: cur_material,
             });
         }
 
-        let vertices_count: usize = submeshes.iter().map(|s| s.vertices.len()).sum();
+        let vertices_count: usize = groups.iter().map(|s| s.vertices.len()).sum();
         if vertices_count > 0 {
-            let center = submeshes
+            let center = groups
                 .iter()
                 .flat_map(|s| s.vertices.iter().map(|v| v.position))
                 .fold(Vec3::ZERO, |acc, p| acc + p)
                 / vertices_count as f32;
 
-            for sm in &mut submeshes {
+            for sm in &mut groups {
                 for v in &mut sm.vertices {
                     v.position -= center;
                 }
             }
         }
 
-        Ok(Mesh {
-            submeshes,
-            materials,
-        })
+        Ok(Mesh { groups, materials })
     }
 
     fn to_usize(s: &str) -> Option<usize> {
@@ -229,5 +236,5 @@ impl ObjFileParser {
 fn compute_normal(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
     let edge1 = b - a;
     let edge2 = c - a;
-    edge1.cross(edge2)
+    edge1.cross(edge2).normalize()
 }

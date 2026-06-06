@@ -1,6 +1,18 @@
 use crate::math::Mat4;
 use crate::math::Vec3;
-use crate::renderer::MeshHandle;
+use crate::renderer::{MeshHandle, Vertex};
+use crate::scene::Material;
+
+pub struct Group {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub material: Option<usize>,
+}
+
+pub struct Mesh {
+    pub groups: Vec<Group>,
+    pub materials: Vec<Material>,
+}
 
 pub type ObjectHandle = usize;
 

@@ -115,13 +115,13 @@ impl App {
                 }
 
                 Event::MouseButtonDown {
-                    mouse_btn: MouseButton::Right,
+                    mouse_btn: MouseButton::Left,
                     ..
                 } => {
                     self.mouse_pressed = true;
                 }
                 Event::MouseButtonUp {
-                    mouse_btn: MouseButton::Right,
+                    mouse_btn: MouseButton::Left,
                     ..
                 } => {
                     self.mouse_pressed = false;

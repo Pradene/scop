@@ -67,7 +67,7 @@ impl From<&GpuMaterial> for MaterialPushConstants {
     }
 }
 
-pub struct GpuPrimitive {
+pub struct GpuGroup {
     pub index_offset: u32,
     pub index_count: u32,
     pub vertex_offset: i32,
@@ -77,7 +77,7 @@ pub struct GpuPrimitive {
 pub struct GpuMesh {
     pub vertex_buffer: VkBuffer<Vertex>,
     pub index_buffer: VkBuffer<u32>,
-    pub primitives: Vec<GpuPrimitive>,
+    pub groups: Vec<GpuGroup>,
 }
 
 #[repr(C)]

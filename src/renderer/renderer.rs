@@ -5,7 +5,7 @@ use ash::vk;
 use super::query_swapchain_support;
 use super::MAX_FRAMES_IN_FLIGHT;
 use super::{
-    FrameData, GpuMesh, GpuPrimitive, MaterialPushConstants, MeshPushConstants, ResourcesManager,
+    FrameData, GpuGroup, GpuMesh, MaterialPushConstants, MeshPushConstants, ResourcesManager,
     VkCommandPool, VkContext, VkDescriptorPool, VkDescriptorSetLayout, VkPipeline, VkQueue,
     VkRenderPass, VkSwapchain,
 };
@@ -331,8 +331,8 @@ impl Renderer {
             let transform = object.transform();
             let mesh = resources.get_mesh(object.id());
             self.bind_mesh(cmd, mesh, transform);
-            for primitive in &mesh.primitives {
-                self.draw_submesh(cmd, primitive, resources);
+            for group in &mesh.groups {
+                self.draw_submesh(cmd, group, resources);
             }
         }
     }
@@ -367,10 +367,10 @@ impl Renderer {
     fn draw_submesh(
         &self,
         cmd: &vk::CommandBuffer,
-        submesh: &GpuPrimitive,
+        group: &GpuGroup,
         resources: &ResourcesManager,
     ) {
-        let mat = resources.get_material(submesh.material);
+        let mat = resources.get_material(group.material);
         let fpc = MaterialPushConstants::from(mat);
 
         let device = &self.context.device;
@@ -387,10 +387,10 @@ impl Renderer {
             );
             device.handle.cmd_draw_indexed(
                 *cmd,
-                submesh.index_count,
+                group.index_count,
                 1,
-                submesh.index_offset,
-                submesh.vertex_offset,
+                group.index_offset,
+                group.vertex_offset,
                 0,
             );
         }

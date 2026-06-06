@@ -4,11 +4,11 @@ use std::sync::Arc;
 use ash::vk;
 
 use super::{
-    GpuMaterial, GpuMesh, GpuPrimitive, Vertex, VkBuffer, VkCommandPool, VkContext, VkDevice,
-    VkQueue, VkTexture,
+    GpuGroup, GpuMaterial, GpuMesh, Vertex, VkBuffer, VkCommandPool, VkContext, VkDevice, VkQueue,
+    VkTexture,
 };
-use crate::parser::{Material, Mesh, ObjFileParser};
-
+use crate::parser::ObjFileParser;
+use crate::scene::{Material, Mesh};
 pub type TextureHandle = usize;
 pub type MaterialHandle = usize;
 pub type MeshHandle = usize;
@@ -110,7 +110,7 @@ impl ResourcesManager {
     pub fn save_mesh(&mut self, context: &VkContext, mesh: &Mesh) -> Result<MeshHandle, String> {
         let mut all_vertices: Vec<Vertex> = Vec::new();
         let mut all_indices: Vec<u32> = Vec::new();
-        let mut primitives: Vec<GpuPrimitive> = Vec::new();
+        let mut groups: Vec<GpuGroup> = Vec::new();
 
         let mut materials: Vec<MaterialHandle> = Vec::new();
         for raw in &mesh.materials {
@@ -120,25 +120,25 @@ impl ResourcesManager {
             materials.push(handle);
         }
 
-        for submesh in &mesh.submeshes {
-            if submesh.indices.is_empty() {
+        for group in &mesh.groups {
+            if group.indices.is_empty() {
                 continue;
             }
 
             let index_offset = all_indices.len() as u32;
             let vertex_offset = all_vertices.len() as i32;
 
-            let material = submesh
+            let material = group
                 .material
                 .map(|i| materials[i])
                 .unwrap_or(Self::default_material());
 
-            all_vertices.extend_from_slice(&submesh.vertices);
-            all_indices.extend_from_slice(&submesh.indices);
+            all_vertices.extend_from_slice(&group.vertices);
+            all_indices.extend_from_slice(&group.indices);
 
-            primitives.push(GpuPrimitive {
+            groups.push(GpuGroup {
                 index_offset,
-                index_count: submesh.indices.len() as u32,
+                index_count: group.indices.len() as u32,
                 vertex_offset,
                 material,
             });
@@ -168,7 +168,7 @@ impl ResourcesManager {
         self.meshes.push(GpuMesh {
             vertex_buffer,
             index_buffer,
-            primitives,
+            groups,
         });
 
         Ok(handle)

@@ -1,7 +1,7 @@
 # Sample MTL file - materials.mtl
 
 newmtl red
-Ka 0.0 0.6 0.0
+Ka 1.0 0.0 0.0
 Kd 0.8 0.0 0.0
 Ks 0.5 0.5 0.5
 Ns 50.0
