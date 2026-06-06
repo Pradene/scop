@@ -11,12 +11,12 @@ use super::{Material, MtlFileParser};
 pub struct Primitive {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
-    pub material: Option<String>,
+    pub material: Option<usize>,
 }
 
 pub struct Mesh {
     pub submeshes: Vec<Primitive>,
-    pub materials: HashMap<String, Material>,
+    pub materials: Vec<Material>,
 }
 
 pub struct ObjFileParser;
@@ -32,13 +32,14 @@ impl ObjFileParser {
         let mut positions: Vec<Vec3> = Vec::new();
         let mut normals: Vec<Vec3> = Vec::new();
         let mut texcoords: Vec<Vec2> = Vec::new();
-        let mut materials: HashMap<String, Material> = HashMap::new();
+        let mut materials_map: HashMap<String, usize> = HashMap::new();
+        let mut materials: Vec<Material> = Vec::new();
 
         let mut submeshes: Vec<Primitive> = Vec::new();
         let mut cur_verts: Vec<Vertex> = Vec::new();
         let mut cur_indices: Vec<u32> = Vec::new();
         let mut cur_index_map: HashMap<(usize, Option<usize>, Option<usize>), u32> = HashMap::new();
-        let mut cur_material: Option<String> = None;
+        let mut cur_material: Option<usize> = None;
 
         for line_result in reader.lines() {
             let line = line_result.map_err(|e| e.to_string())?;
@@ -75,7 +76,8 @@ impl ObjFileParser {
                     cur_material = if remainder.is_empty() {
                         None
                     } else {
-                        Some(remainder.join(" "))
+                        let name = remainder.join(" ");
+                        materials_map.get(&name).copied()
                     };
                 }
                 "f" => {
@@ -124,7 +126,11 @@ impl ObjFileParser {
                     for token in &remainder[2..] {
                         let current = parse_fv(token)?;
 
-                        let normal = compute_normal(positions[first.0], positions[prev.0], positions[current.0]);
+                        let normal = compute_normal(
+                            positions[first.0],
+                            positions[prev.0],
+                            positions[current.0],
+                        );
 
                         for (vi, ti, ni) in [first, prev, current] {
                             let idx = *cur_index_map.entry((vi, ti, ni)).or_insert_with(|| {
@@ -151,7 +157,10 @@ impl ObjFileParser {
                 "mtllib" => {
                     if !remainder.is_empty() {
                         let parsed = MtlFileParser::parse(base_dir.join(remainder.join(" ")))?;
-                        materials.extend(parsed);
+                        for (name, material) in parsed {
+                            materials_map.insert(name, materials.len());
+                            materials.push(material);
+                        }
                     }
                 }
                 _ => {}
@@ -166,13 +175,13 @@ impl ObjFileParser {
             });
         }
 
-        let total: usize = submeshes.iter().map(|s| s.vertices.len()).sum();
-        if total > 0 {
+        let vertices_count: usize = submeshes.iter().map(|s| s.vertices.len()).sum();
+        if vertices_count > 0 {
             let center = submeshes
                 .iter()
                 .flat_map(|s| s.vertices.iter().map(|v| v.position))
                 .fold(Vec3::ZERO, |acc, p| acc + p)
-                / total as f32;
+                / vertices_count as f32;
 
             for sm in &mut submeshes {
                 for v in &mut sm.vertices {

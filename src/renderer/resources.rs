@@ -18,7 +18,6 @@ pub struct ResourcesManager {
     pub texture_cache: HashMap<String, TextureHandle>,
 
     pub materials: Vec<GpuMaterial>,
-    pub material_cache: HashMap<String, MaterialHandle>,
 
     pub meshes: Vec<GpuMesh>,
     pub mesh_cache: HashMap<String, MeshHandle>,
@@ -44,7 +43,6 @@ impl ResourcesManager {
             textures: vec![white],
             texture_cache: HashMap::new(),
             materials: vec![default_material],
-            material_cache: HashMap::new(),
             meshes: Vec::new(),
             mesh_cache: HashMap::new(),
 
@@ -114,13 +112,12 @@ impl ResourcesManager {
         let mut all_indices: Vec<u32> = Vec::new();
         let mut primitives: Vec<GpuPrimitive> = Vec::new();
 
-        for (name, raw) in &mesh.materials {
-            if !self.material_cache.contains_key(name) {
-                let mat = self.resolve_material(context, raw);
-                let handle = self.materials.len();
-                self.materials.push(mat);
-                self.material_cache.insert(name.clone(), handle);
-            }
+        let mut materials: Vec<MaterialHandle> = Vec::new();
+        for raw in &mesh.materials {
+            let handle = self.materials.len();
+            let mat = self.resolve_material(context, raw);
+            self.materials.push(mat);
+            materials.push(handle);
         }
 
         for submesh in &mesh.submeshes {
@@ -130,15 +127,15 @@ impl ResourcesManager {
 
             let index_offset = all_indices.len() as u32;
             let vertex_offset = all_vertices.len() as i32;
+
             let material = submesh
                 .material
-                .as_deref()
-                .and_then(|n| self.material_cache.get(n))
-                .copied()
+                .map(|i| materials[i])
                 .unwrap_or(Self::default_material());
 
             all_vertices.extend_from_slice(&submesh.vertices);
             all_indices.extend_from_slice(&submesh.indices);
+
             primitives.push(GpuPrimitive {
                 index_offset,
                 index_count: submesh.indices.len() as u32,

@@ -65,39 +65,54 @@ impl MtlFileParser {
                 *current = Material::default();
                 *name = rem.join(" ");
             }
-            "Ka" => { current.ka = Self::to_vec3(rem).ok_or_else(|| "Invalid Ambient Color (Ka)".to_string())?; }
-            "Kd" => { current.kd = Self::to_vec3(rem).ok_or_else(|| "Invalid Diffuse Color (Kd)".to_string())?; }
-            "Ks" => { current.ks = Self::to_vec3(rem).ok_or_else(|| "Invalid Specular Color (Ks)".to_string())?; }
+            "Ka" => {
+                current.ka =
+                    Self::to_vec3(rem).ok_or_else(|| "Invalid Ambient Color (Ka)".to_string())?;
+            }
+            "Kd" => {
+                current.kd =
+                    Self::to_vec3(rem).ok_or_else(|| "Invalid Diffuse Color (Kd)".to_string())?;
+            }
+            "Ks" => {
+                current.ks =
+                    Self::to_vec3(rem).ok_or_else(|| "Invalid Specular Color (Ks)".to_string())?;
+            }
 
             "Ns" => {
-                current.ns = 
-                    rem.get(0)
-                        .and_then(|s| Self::to_f32(s))
-                        .ok_or_else(|| "Invalid Specular Exponent (Ns)".to_string())?;
+                current.ns = rem
+                    .get(0)
+                    .and_then(|s| Self::to_f32(s))
+                    .ok_or_else(|| "Invalid Specular Exponent (Ns)".to_string())?;
             }
             "Ni" => {
-                current.ni = 
-                    rem.get(0)
-                        .and_then(|s| Self::to_f32(s))
-                        .ok_or_else(|| "Invalid Optical Density (Ni)".to_string())?;
+                current.ni = rem
+                    .get(0)
+                    .and_then(|s| Self::to_f32(s))
+                    .ok_or_else(|| "Invalid Optical Density (Ni)".to_string())?;
             }
             "d" => {
-                current.dissolve = 
-                    rem.get(0)
-                        .and_then(|s| Self::to_f32(s))
-                        .ok_or_else(|| "Invalid Dissolve (d)".to_string())?;
+                current.dissolve = rem
+                    .get(0)
+                    .and_then(|s| Self::to_f32(s))
+                    .ok_or_else(|| "Invalid Dissolve (d)".to_string())?;
             }
 
             "illum" => {
-                current.illum = 
-                    rem.get(0)
-                        .and_then(|s| s.parse::<i32>().ok())
-                        .ok_or_else(|| "Invalid Illumination Model".to_string())?;
+                current.illum = rem
+                    .get(0)
+                    .and_then(|s| s.parse::<i32>().ok())
+                    .ok_or_else(|| "Invalid Illumination Model".to_string())?;
             }
 
-            "map_Ka" => {current.map_ka = rem.join(" ");}
-            "map_Kd" => {current.map_kd = rem.join(" ");}
-            "map_Ks" => {current.map_ks = rem.join(" ");}
+            "map_Ka" => {
+                current.map_ka = rem.join(" ");
+            }
+            "map_Kd" => {
+                current.map_kd = rem.join(" ");
+            }
+            "map_Ks" => {
+                current.map_ks = rem.join(" ");
+            }
             _ => {}
         }
         Ok(())
