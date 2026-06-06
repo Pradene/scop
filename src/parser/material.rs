@@ -40,8 +40,6 @@ impl MtlFileParser {
             return Ok(());
         }
 
-        let tokens: Vec<&str> = trimmed.split_whitespace().collect();
-
         let parts: Vec<&str> = trimmed.split_whitespace().collect();
         if parts.is_empty() {
             return Ok(());
