@@ -166,7 +166,7 @@ impl Mat4 {
             Vec4::new(0., 0., 1., 0.),
             Vec4::new(position.x, position.y, position.z, 1.),
         );
-        t * *self
+        *self * t
     }
 
     /// Returns `rotation(angle, axis) * self`.
@@ -183,7 +183,7 @@ impl Mat4 {
             Vec4::new(x * z * mc + y * s, y * z * mc - x * s, z * z * mc + c, 0.),
             Vec4::new(0., 0., 0., 1.),
         );
-        rotation * *self
+        *self * rotation
     }
 
     /// Returns `scale(s) * self`.
@@ -194,7 +194,7 @@ impl Mat4 {
             Vec4::new(0., 0., s.z, 0.),
             Vec4::new(0., 0., 0., 1.),
         );
-        sc * *self
+        *self * sc
     }
 }
 

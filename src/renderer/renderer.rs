@@ -203,7 +203,12 @@ impl Renderer {
             .queue_present(&self.present_queue.handle, &signal_semaphores, image_index)
     }
 
-    fn record(&self, image_index: u32, scene: &Scene, resources: &ResourcesManager) -> Result<(), String> {
+    fn record(
+        &self,
+        image_index: u32,
+        scene: &Scene,
+        resources: &ResourcesManager,
+    ) -> Result<(), String> {
         let frame = &self.frames[self.frame];
         let cmd = frame.command_buffer;
         let device = &self.context.device;
@@ -333,9 +338,7 @@ impl Renderer {
     }
 
     fn bind_mesh(&self, cmd: &vk::CommandBuffer, mesh: &GpuMesh, transform: Mat4) {
-        let vpc = MeshPushConstants {
-            transform,
-        };
+        let vpc = MeshPushConstants { transform };
 
         let device = &self.context.device;
         unsafe {
