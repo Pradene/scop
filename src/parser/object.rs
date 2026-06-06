@@ -124,6 +124,8 @@ impl ObjFileParser {
                     for token in &remainder[2..] {
                         let current = parse_fv(token)?;
 
+                        let normal = compute_normal(positions[first.0], positions[prev.0], positions[current.0]);
+
                         for (vi, ti, ni) in [first, prev, current] {
                             let idx = *cur_index_map.entry((vi, ti, ni)).or_insert_with(|| {
                                 let i = cur_verts.len() as u32;
@@ -132,7 +134,7 @@ impl ObjFileParser {
                                     normal: ni
                                         .and_then(|n| normals.get(n))
                                         .copied()
-                                        .unwrap_or(Vec3::new(0.0, 1.0, 0.0)),
+                                        .unwrap_or(normal),
                                     uv: ti
                                         .and_then(|t| texcoords.get(t))
                                         .map(|v| Vec2::new(v.x, v.y))
@@ -213,4 +215,10 @@ impl ObjFileParser {
             Self::to_f32(tokens[1])?,
         ))
     }
+}
+
+fn compute_normal(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
+    let edge1 = b - a;
+    let edge2 = c - a;
+    edge1.cross(edge2)
 }
