@@ -58,16 +58,16 @@ impl MtlFileParser {
                 *name = remainder.join(" ");
             }
             "Ka" => {
-                current.ka =
-                    Self::to_vec3(remainder).ok_or_else(|| "Invalid Ambient Color (Ka)".to_string())?;
+                current.ka = Self::to_vec3(remainder)
+                    .ok_or_else(|| "Invalid Ambient Color (Ka)".to_string())?;
             }
             "Kd" => {
-                current.kd =
-                    Self::to_vec3(remainder).ok_or_else(|| "Invalid Diffuse Color (Kd)".to_string())?;
+                current.kd = Self::to_vec3(remainder)
+                    .ok_or_else(|| "Invalid Diffuse Color (Kd)".to_string())?;
             }
             "Ks" => {
-                current.ks =
-                    Self::to_vec3(remainder).ok_or_else(|| "Invalid Specular Color (Ks)".to_string())?;
+                current.ks = Self::to_vec3(remainder)
+                    .ok_or_else(|| "Invalid Specular Color (Ks)".to_string())?;
             }
 
             "Ns" => {
@@ -105,7 +105,9 @@ impl MtlFileParser {
             "map_Ks" => {
                 current.map_ks = remainder.join(" ");
             }
-            _ => { println!("{}", parts[0]); }
+            _ => {
+                println!("{}", parts[0]);
+            }
         }
         Ok(())
     }
