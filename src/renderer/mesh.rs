@@ -52,7 +52,6 @@ pub struct MaterialPushConstants {
 
 impl From<&GpuMaterial> for MaterialPushConstants {
     fn from(mat: &GpuMaterial) -> Self {
-        let white = ResourcesManager::white_texture();
         Self {
             ambient: mat.ka,
             diffuse: mat.kd,

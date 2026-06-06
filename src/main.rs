@@ -1,10 +1,6 @@
 use std::time::Instant;
 
-use scop::{
-    app::App,
-    math::{Mat4, Vec3},
-    scene::Object,
-};
+use scop::{app::App, math::Vec3, scene::Object};
 
 fn main() -> Result<(), String> {
     let mut app: App = App::new()?;
@@ -33,7 +29,6 @@ fn main() -> Result<(), String> {
         let elapsed = now.duration_since(start).as_millis() as f32 / 1000.;
         let speed = 2.;
         let angle = speed * elapsed;
-        let transform = Mat4::identity().rotate(angle, Vec3::Y);
 
         app.get_object(obj1_id).set_rotation(0., angle, 0.);
 
