@@ -63,6 +63,10 @@ impl ResourcesManager {
     }
 
     pub fn load_texture(&mut self, context: &VkContext, path: &str) -> TextureHandle {
+        if path.is_empty() {
+            return Self::white_texture();
+        }
+
         if let Some(&handle) = self.texture_cache.get(path) {
             return handle;
         }
@@ -87,9 +91,9 @@ impl ResourcesManager {
     /// Converts a Material (string paths) into a GpuMaterial (TextureHandles),
     /// uploading any textures that haven't been loaded yet.
     fn resolve_material(&mut self, context: &VkContext, raw: &Material) -> GpuMaterial {
-        let map_kd = raw.map_kd.as_deref().map(|p| self.load_texture(context, p));
-        let map_ks = raw.map_ks.as_deref().map(|p| self.load_texture(context, p));
-        let map_ka = raw.map_ka.as_deref().map(|p| self.load_texture(context, p));
+        let map_kd = self.load_texture(context, &raw.map_kd);
+        let map_ks = self.load_texture(context, &raw.map_ks);
+        let map_ka = self.load_texture(context, &raw.map_ka);
 
         GpuMaterial {
             ka: raw.ka,

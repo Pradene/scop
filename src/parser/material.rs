@@ -7,16 +7,16 @@ use crate::math::Vec3;
 
 #[derive(Debug, Default, Clone)]
 pub struct Material {
-    pub ka: Option<Vec3>,
-    pub kd: Option<Vec3>,
-    pub ks: Option<Vec3>,
-    pub ns: Option<f32>,
-    pub ni: Option<f32>,
-    pub dissolve: Option<f32>,
-    pub illum: Option<i32>,
-    pub map_ka: Option<String>,
-    pub map_kd: Option<String>,
-    pub map_ks: Option<String>,
+    pub ka: Vec3,
+    pub kd: Vec3,
+    pub ks: Vec3,
+    pub ns: f32,
+    pub ni: f32,
+    pub dissolve: f32,
+    pub illum: i32,
+    pub map_ka: String,
+    pub map_kd: String,
+    pub map_ks: String,
 }
 
 pub struct MtlFileParser;
@@ -65,43 +65,39 @@ impl MtlFileParser {
                 *current = Material::default();
                 *name = rem.join(" ");
             }
-            "Ka" => current.ka = Some(Self::to_vec3(rem).ok_or("Invalid Ambient Color (Ka)")?),
-            "Kd" => current.kd = Some(Self::to_vec3(rem).ok_or("Invalid Diffuse Color (Kd)")?),
-            "Ks" => current.ks = Some(Self::to_vec3(rem).ok_or("Invalid Specular Color (Ks)")?),
+            "Ka" => { current.ka = Self::to_vec3(rem).ok_or_else(|| "Invalid Ambient Color (Ka)".to_string())?; }
+            "Kd" => { current.kd = Self::to_vec3(rem).ok_or_else(|| "Invalid Diffuse Color (Kd)".to_string())?; }
+            "Ks" => { current.ks = Self::to_vec3(rem).ok_or_else(|| "Invalid Specular Color (Ks)".to_string())?; }
 
             "Ns" => {
-                current.ns = Some(
+                current.ns = 
                     rem.get(0)
                         .and_then(|s| Self::to_f32(s))
-                        .ok_or("Invalid Specular Exponent (Ns)")?,
-                )
+                        .ok_or_else(|| "Invalid Specular Exponent (Ns)".to_string())?;
             }
             "Ni" => {
-                current.ni = Some(
+                current.ni = 
                     rem.get(0)
                         .and_then(|s| Self::to_f32(s))
-                        .ok_or("Invalid Optical Density (Ni)")?,
-                )
+                        .ok_or_else(|| "Invalid Optical Density (Ni)".to_string())?;
             }
             "d" => {
-                current.dissolve = Some(
+                current.dissolve = 
                     rem.get(0)
                         .and_then(|s| Self::to_f32(s))
-                        .ok_or("Invalid Dissolve (d)")?,
-                )
+                        .ok_or_else(|| "Invalid Dissolve (d)".to_string())?;
             }
 
             "illum" => {
-                current.illum = Some(
+                current.illum = 
                     rem.get(0)
                         .and_then(|s| s.parse::<i32>().ok())
-                        .ok_or("Invalid Illumination Model")?,
-                )
+                        .ok_or_else(|| "Invalid Illumination Model".to_string())?;
             }
 
-            "map_Ka" => current.map_ka = Some(rem.join(" ")),
-            "map_Kd" => current.map_kd = Some(rem.join(" ")),
-            "map_Ks" => current.map_ks = Some(rem.join(" ")),
+            "map_Ka" => {current.map_ka = rem.join(" ");}
+            "map_Kd" => {current.map_kd = rem.join(" ");}
+            "map_Ks" => {current.map_ks = rem.join(" ");}
             _ => {}
         }
         Ok(())
